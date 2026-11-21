@@ -1,9 +1,12 @@
+import { DailyChallenge, PlayVariant, WeaponType } from './challenge';
+
 export type GameMode = 'menu' | 'playing' | 'paused' | 'dying' | 'over';
 
 export type EnemyType = 'runner' | 'walker' | 'brute';
 
 export interface HeroState {
   hp: number;
+  maxHp: number;
   recoil: number;
   flashT: number;
   hurtT: number;
@@ -45,6 +48,17 @@ export interface Bullet {
   speed: number;
   trail: Array<{ x: number; y: number }>;
   dead?: boolean;
+  isRail?: boolean;
+  isSplit?: boolean;
+}
+
+export interface BeamEffect {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  life: number;
+  max: number;
 }
 
 export interface Particle {
@@ -79,8 +93,17 @@ export interface Pillar {
   w: number;
 }
 
+export interface WpmPoint {
+  t: number;
+  wpm: number;
+}
+
 export interface GameState {
   mode: GameMode;
+  variant: PlayVariant;
+  challenge: DailyChallenge | null;
+  weapon: WeaponType;
+  weaponCharge: number;
   time: number;
   runTime: number;
   lastTs: number;
@@ -88,6 +111,7 @@ export interface GameState {
   activeId: number | null;
   enemies: Enemy[];
   bullets: Bullet[];
+  beams: BeamEffect[];
   particles: Particle[];
   floats: FloatText[];
   spawnT: number;
@@ -103,6 +127,8 @@ export interface GameState {
   shake: number;
   nextId: number;
   overT: number;
+  wpmHistory: WpmPoint[];
+  wpmSampleT: number;
 }
 
 export interface Palette {
@@ -145,7 +171,12 @@ export interface BubbleRect {
 
 export interface HudSnapshot {
   mode: GameMode;
+  variant: PlayVariant;
+  challengeName: string | null;
+  weapon: WeaponType;
+  weaponLabel: string;
   hp: number;
+  maxHp: number;
   score: number;
   wave: number;
   kills: number;
@@ -161,4 +192,5 @@ export interface HudSnapshot {
   targetProgress: number;
   targetMarks: boolean[];
   targetIsLine: boolean;
+  wpmHistory: WpmPoint[];
 }

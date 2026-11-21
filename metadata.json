@@ -1,6 +1,6 @@
 {
-  "name": "HAIRLINE — Type Arcade",
-  "description": "A stick-figure typing shooter drawn in the hairline illustration style. Every correct letter is a bullet. Every miss fires back.",
+  "name": "HAIRLINE — Type Arcade & Typing Defense",
+  "description": "Two minimalist hairline-illustrated typing games: hold the firing line in Type Arcade or command three turret lanes in Typing Defense, with live D3 WPM trend analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

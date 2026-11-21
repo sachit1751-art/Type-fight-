@@ -1,8 +1,29 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AudioSettingsDrawer } from './components/AudioSettingsDrawer';
 import { HelpDrawer } from './components/HelpDrawer';
+import { HomeLanding } from './components/HomeLanding';
 import { HudBar } from './components/HudBar';
-import { TopBar } from './components/TopBar';
-import { ensureAudio, isSoundOn, setSoundEnabled, SFX } from './game/audio';
+import { OnboardingModal } from './components/OnboardingModal';
+import { SocialShareBar } from './components/SocialShareBar';
+import { TopBar, WorkspaceView } from './components/TopBar';
+import { TypingDefenseHandle, TypingDefenseView } from './components/TypingDefenseView';
+import { WpmTrendChart } from './components/WpmTrendChart';
+import {
+  ensureAudio,
+  getAudioSettings,
+  setSoundEnabled,
+  SFX,
+  subscribeAudioSettings,
+} from './game/audio';
+import {
+  DailyChallenge,
+  DailyProgress,
+  formatLocalDateKey,
+  getDailyChallenge,
+  getDailyProgress,
+  PlayVariant,
+  recordDailyRun,
+} from './game/challenge';
 import {
   createPillars,
   drawGame,
@@ -15,6 +36,7 @@ import {
   updateGame,
   W,
 } from './game/engine';
+import { buildArcadeShareText, renderArcadeShareCardPng } from './game/shareCard';
 import { GameState, HudSnapshot } from './game/types';
 
 const THEME_KEY = 'hairline-type-defense-theme';
@@ -24,9 +46,34 @@ export default function App() {
   const mobileInputRef = useRef<HTMLInputElement | null>(null);
   const helpBtnRef = useRef<HTMLButtonElement | null>(null);
   const helpCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const audioBtnRef = useRef<HTMLButtonElement | null>(null);
+  const audioCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const defenseRef = useRef<TypingDefenseHandle | null>(null);
 
-  const gameRef = useRef<GameState>(freshState());
+  const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge>(() => getDailyChallenge());
+  const dailyChallengeRef = useRef(dailyChallenge);
+  dailyChallengeRef.current = dailyChallenge;
+
+  const [dailyProgress, setDailyProgress] = useState<DailyProgress>(() => getDailyProgress());
+
+  const [arcadeVariant, setArcadeVariant] = useState<PlayVariant>('standard');
+  const arcadeVariantRef = useRef(arcadeVariant);
+  arcadeVariantRef.current = arcadeVariant;
+
+  const [defenseVariant, setDefenseVariant] = useState<PlayVariant>('standard');
+
+  const gameRef = useRef<GameState>(freshState('standard', dailyChallenge));
   const pillarsRef = useRef(createPillars());
+
+  const [activeView, setActiveView] = useState<WorkspaceView>('home');
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
+
+  const [defenseStatus, setDefenseStatus] = useState<{
+    running: boolean;
+    paused: boolean;
+    over: boolean;
+  }>({ running: false, paused: false, over: false });
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try {
@@ -38,11 +85,21 @@ export default function App() {
   const darkRef = useRef(darkMode);
   darkRef.current = darkMode;
 
-  const [soundOn, setSoundOn] = useState<boolean>(() => isSoundOn());
+  const [soundOn, setSoundOn] = useState<boolean>(() => getAudioSettings().enabled);
   const [helpOpen, setHelpOpen] = useState<boolean>(false);
   const helpOpenRef = useRef(helpOpen);
   helpOpenRef.current = helpOpen;
   const helpPausedGameRef = useRef<boolean>(false);
+
+  const [audioOpen, setAudioOpen] = useState<boolean>(false);
+  const audioOpenRef = useRef(audioOpen);
+  audioOpenRef.current = audioOpen;
+  const audioPausedGameRef = useRef<boolean>(false);
+
+  const [tutorialOpen, setTutorialOpen] = useState<boolean>(false);
+  const tutorialOpenRef = useRef(tutorialOpen);
+  tutorialOpenRef.current = tutorialOpen;
+  const tutorialPausedGameRef = useRef<boolean>(false);
 
   const [hud, setHud] = useState<HudSnapshot>(() => getHudSnapshot(gameRef.current));
   const [feedbackHtml, setFeedbackHtml] = useState<string>(
@@ -70,6 +127,29 @@ export default function App() {
       /* ignore */
     }
   }, [darkMode]);
+
+  /* Keep TopBar sound indicator synchronized with AudioSettingsDrawer */
+  useEffect(() => {
+    return subscribeAudioSettings(settings => {
+      setSoundOn(settings.enabled);
+    });
+  }, []);
+
+  /* Refresh daily challenge automatically when crossing midnight */
+  useEffect(() => {
+    const checkDate = () => {
+      const todayKey = formatLocalDateKey();
+      if (todayKey !== dailyChallengeRef.current.dateKey) {
+        setDailyChallenge(getDailyChallenge());
+      }
+    };
+    const timer = window.setInterval(checkDate, 60000);
+    window.addEventListener('focus', checkDate);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', checkDate);
+    };
+  }, []);
 
   const syncHudNow = useCallback(() => {
     setHud(getHudSnapshot(gameRef.current));
@@ -126,32 +206,56 @@ export default function App() {
       streakPopTimerRef.current = window.setTimeout(() => setStreakPop(false), 140);
     },
     onGameOver: () => {
+      const G = gameRef.current;
+      if (G.variant === 'daily' && G.challenge) {
+        const updated = recordDailyRun('arcade', G.challenge.dateKey, G.score, G.wave, G.kills);
+        setDailyProgress(updated);
+      }
       triggerFeedback('the hero is down — press <b>PLAY AGAIN</b> or <kbd>Enter</kbd>', 'bad');
       syncHudNow();
     },
   };
 
-  const startGame = useCallback(() => {
-    const G = freshState();
-    G.mode = 'playing';
-    G.spawnT = 2.4;
-    gameRef.current = G;
+  const selectArcadeVariant = useCallback(
+    (next: PlayVariant) => {
+      setArcadeVariant(next);
+      arcadeVariantRef.current = next;
+      if (gameRef.current.mode === 'menu') {
+        gameRef.current = freshState(next, dailyChallengeRef.current);
+        syncHudNow();
+      }
+    },
+    [syncHudNow]
+  );
 
-    spawnEnemy(G, callbacksRef.current);
-    spawnEnemy(G, callbacksRef.current);
-    if (G.enemies[1]) {
-      G.enemies[1].x = W + 260;
-    }
+  const startGame = useCallback(
+    (overrideVariant?: PlayVariant) => {
+      const variant = overrideVariant ?? arcadeVariantRef.current;
+      const challenge = dailyChallengeRef.current;
+      const G = freshState(variant, challenge);
+      G.mode = 'playing';
+      G.spawnT = 2.4;
+      gameRef.current = G;
 
-    showWaveBanner(1);
-    triggerFeedback(
-      'type straight through the <b>current word</b> — wrong letters count, but never block you.',
-      'good'
-    );
-    ensureAudio();
-    SFX.wave();
-    syncHudNow();
-  }, [showWaveBanner, syncHudNow, triggerFeedback]);
+      spawnEnemy(G, callbacksRef.current);
+      spawnEnemy(G, callbacksRef.current);
+      if (G.enemies[1]) {
+        G.enemies[1].x = W + 260;
+      }
+
+      showWaveBanner(1);
+      triggerFeedback(
+        variant === 'daily'
+          ? `<b>${challenge.name}</b> — ${challenge.weaponLabel} online.`
+          : 'type straight through the <b>current word</b> — wrong letters count, but never block you.',
+        'good'
+      );
+      ensureAudio();
+      SFX.wave();
+      syncHudNow();
+    },
+    [showWaveBanner, syncHudNow, triggerFeedback]
+  );
 
   const togglePause = useCallback(
     (force?: boolean) => {
@@ -170,23 +274,29 @@ export default function App() {
 
   const openHelp = useCallback(() => {
     if (helpOpenRef.current) return;
+    if (audioOpenRef.current) {
+      setAudioOpen(false);
+      audioPausedGameRef.current = false;
+    }
     const G = gameRef.current;
-    helpPausedGameRef.current = G.mode === 'playing';
+    helpPausedGameRef.current = activeViewRef.current === 'arcade' && G.mode === 'playing';
     if (helpPausedGameRef.current) {
       G.mode = 'paused';
       syncHudNow();
     }
     setHelpOpen(true);
-    window.requestAnimationFrame(() => {
-      helpCloseBtnRef.current?.focus({ preventScroll: true });
-    });
+    if (activeViewRef.current !== 'defense') {
+      window.requestAnimationFrame(() => {
+        helpCloseBtnRef.current?.focus({ preventScroll: true });
+      });
+    }
   }, [syncHudNow]);
 
   const closeHelp = useCallback(() => {
     if (!helpOpenRef.current) return;
     setHelpOpen(false);
     const G = gameRef.current;
-    if (helpPausedGameRef.current && G.mode === 'paused') {
+    if (helpPausedGameRef.current && G.mode === 'paused' && activeViewRef.current === 'arcade') {
       G.mode = 'playing';
       syncHudNow();
     }
@@ -196,6 +306,79 @@ export default function App() {
     });
   }, [syncHudNow]);
 
+  const openAudio = useCallback(() => {
+    if (audioOpenRef.current) return;
+    if (helpOpenRef.current) {
+      setHelpOpen(false);
+      helpPausedGameRef.current = false;
+    }
+    const G = gameRef.current;
+    audioPausedGameRef.current = activeViewRef.current === 'arcade' && G.mode === 'playing';
+    if (audioPausedGameRef.current) {
+      G.mode = 'paused';
+      syncHudNow();
+    }
+    setAudioOpen(true);
+    window.requestAnimationFrame(() => {
+      audioCloseBtnRef.current?.focus({ preventScroll: true });
+    });
+  }, [syncHudNow]);
+
+  const closeAudio = useCallback(() => {
+    if (!audioOpenRef.current) return;
+    setAudioOpen(false);
+    const G = gameRef.current;
+    if (audioPausedGameRef.current && G.mode === 'paused' && activeViewRef.current === 'arcade') {
+      G.mode = 'playing';
+      syncHudNow();
+    }
+    audioPausedGameRef.current = false;
+    window.requestAnimationFrame(() => {
+      audioBtnRef.current?.focus({ preventScroll: true });
+    });
+  }, [syncHudNow]);
+
+  const openTutorial = useCallback(() => {
+    if (tutorialOpenRef.current) return;
+    const G = gameRef.current;
+    tutorialPausedGameRef.current = activeViewRef.current === 'arcade' && G.mode === 'playing';
+    if (tutorialPausedGameRef.current) {
+      G.mode = 'paused';
+      syncHudNow();
+    }
+    setTutorialOpen(true);
+  }, [syncHudNow]);
+
+  const closeTutorial = useCallback(() => {
+    if (!tutorialOpenRef.current) return;
+    setTutorialOpen(false);
+    const G = gameRef.current;
+    if (tutorialPausedGameRef.current && G.mode === 'paused' && activeViewRef.current === 'arcade') {
+      G.mode = 'playing';
+      syncHudNow();
+    }
+    tutorialPausedGameRef.current = false;
+  }, [syncHudNow]);
+
+  const switchView = useCallback(
+    (next: WorkspaceView) => {
+      if (next !== 'arcade' && gameRef.current.mode === 'playing') {
+        gameRef.current.mode = 'paused';
+        syncHudNow();
+      }
+      if (helpOpenRef.current) {
+        setHelpOpen(false);
+        helpPausedGameRef.current = false;
+      }
+      if (audioOpenRef.current) {
+        setAudioOpen(false);
+        audioPausedGameRef.current = false;
+      }
+      setActiveView(next);
+    },
+    [syncHudNow]
+  );
+
   const processChar = useCallback(
     (ch: string) => {
       handleChar(gameRef.current, ch, callbacksRef.current);
@@ -204,14 +387,14 @@ export default function App() {
     [syncHudNow]
   );
 
-  /* Main 60fps canvas animation loop */
+  /* Main 60fps canvas animation loop for Type Arcade */
   useEffect(() => {
     let rafId = 0;
     const frame = (ts: number) => {
       const G = gameRef.current;
       const dt = Math.min(0.05, G.lastTs ? (ts - G.lastTs) / 1000 : 0.016);
       G.lastTs = ts;
-      if (G.mode !== 'paused') {
+      if (activeViewRef.current === 'arcade' && G.mode !== 'paused') {
         const prevKills = G.kills;
         const prevHp = G.hero.hp;
         const prevTarget = G.activeId;
@@ -221,7 +404,7 @@ export default function App() {
         }
       }
       const canvas = canvasRef.current;
-      if (canvas) {
+      if (canvas && activeViewRef.current === 'arcade') {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const targetW = Math.round(W * dpr);
         const targetH = Math.round(H * dpr);
@@ -241,34 +424,40 @@ export default function App() {
     return () => window.cancelAnimationFrame(rafId);
   }, []);
 
-  /* Periodic HUD sync for WPM readout while playing */
+  /* Periodic HUD sync for WPM readout while playing Type Arcade */
   useEffect(() => {
     const id = window.setInterval(() => {
-      if (gameRef.current.mode === 'playing') {
+      if (activeViewRef.current === 'arcade' && gameRef.current.mode === 'playing') {
         syncHudNow();
       }
     }, 400);
     return () => window.clearInterval(id);
   }, [syncHudNow]);
 
-  /* Global keyboard & window blur listeners */
+  /* Global keyboard & window blur listeners for Type Arcade & shared Esc help close */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (activeViewRef.current === 'defense') return; // handled by TypingDefenseView
+
       if (e.key === 'Escape') {
         if (helpOpenRef.current) {
           e.preventDefault();
           closeHelp();
           return;
         }
-        const mode = gameRef.current.mode;
-        if (mode === 'playing' || mode === 'paused') {
-          e.preventDefault();
-          togglePause();
+        if (tutorialOpenRef.current) return; // handled by OnboardingModal
+        if (activeViewRef.current === 'arcade') {
+          const mode = gameRef.current.mode;
+          if (mode === 'playing' || mode === 'paused') {
+            e.preventDefault();
+            togglePause();
+          }
         }
         return;
       }
 
-      if (helpOpenRef.current) return;
+      if (helpOpenRef.current || audioOpenRef.current || tutorialOpenRef.current) return;
+      if (activeViewRef.current !== 'arcade') return;
 
       if (e.key === 'Enter') {
         const mode = gameRef.current.mode;
@@ -290,7 +479,7 @@ export default function App() {
     };
 
     const onBlur = () => {
-      if (gameRef.current.mode === 'playing') {
+      if (activeViewRef.current === 'arcade' && gameRef.current.mode === 'playing') {
         togglePause(true);
       }
     };
@@ -324,15 +513,23 @@ export default function App() {
   };
 
   const handleTogglePause = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const mode = gameRef.current.mode;
-    if (mode === 'playing' || mode === 'paused') {
-      togglePause();
+    if (activeView === 'arcade') {
+      const mode = gameRef.current.mode;
+      if (mode === 'playing' || mode === 'paused') {
+        togglePause();
+      }
+    } else if (activeView === 'defense') {
+      defenseRef.current?.togglePause();
     }
     e.currentTarget.blur();
   };
 
   const handleRestart = (e: React.MouseEvent<HTMLButtonElement>) => {
-    startGame();
+    if (activeView === 'arcade') {
+      startGame();
+    } else if (activeView === 'defense') {
+      defenseRef.current?.restart();
+    }
     e.currentTarget.blur();
   };
 
@@ -348,18 +545,37 @@ export default function App() {
     e.currentTarget.blur();
   };
 
+  const canPause =
+    (activeView === 'arcade' && (hud.mode === 'playing' || hud.mode === 'paused')) ||
+    (activeView === 'defense' && defenseStatus.running);
+  const isPaused =
+    (activeView === 'arcade' && hud.mode === 'paused') ||
+    (activeView === 'defense' && defenseStatus.paused);
+  const canRestart = activeView === 'arcade' || activeView === 'defense';
+
   return (
     <>
       <TopBar
-        mode={hud.mode}
+        activeView={activeView}
+        canPause={canPause}
+        isPaused={isPaused}
+        canRestart={canRestart}
         soundOn={soundOn}
         darkMode={darkMode}
         helpOpen={helpOpen}
+        audioOpen={audioOpen}
         helpBtnRef={helpBtnRef}
+        audioBtnRef={audioBtnRef}
+        onGoHome={() => switchView('home')}
         onOpenHelp={() => {
           openHelp();
           helpBtnRef.current?.blur();
         }}
+        onOpenAudio={() => {
+          openAudio();
+          audioBtnRef.current?.blur();
+        }}
+        onOpenTutorial={openTutorial}
         onToggleSound={handleToggleSound}
         onToggleTheme={handleToggleTheme}
         onTogglePause={handleTogglePause}
@@ -367,231 +583,422 @@ export default function App() {
       />
 
       <main className="shell">
-        <HudBar hud={hud} streakPop={streakPop} />
-
-        <section className="stage-wrap">
-          <div className="stage-head">
-            <span className="cap">Fig. 01 — The firing line</span>
-            <span className="cap dim" id="stageReadout">
-              {hud.readout}
-            </span>
-          </div>
-
-          <div className={`stage${shaking ? ' shake' : ''}`} id="stage">
-            <canvas
-              ref={canvasRef}
-              id="game"
-              width={W}
-              height={H}
-              aria-label="Battlefield: a stick-figure hero on the left shooting typed letters at stick-figure enemies approaching from the right."
-            />
-
-            {waveBanner && (
-              <div key={waveBanner.key} className="wave-banner" id="waveBanner">
-                {waveBanner.text}
-              </div>
-            )}
-
-            <div
-              key={vignetteKey}
-              className={`hit-vignette${vignetteKey > 0 ? ' on' : ''}`}
-              id="hitVignette"
-              aria-hidden="true"
-            />
-
-            {/* MENU */}
-            <div className="overlay" id="menuOverlay" hidden={hud.mode !== 'menu'}>
-              <div className="overlay-card">
-                <p className="cap accent-cap">A typing shooter · drawn with hairlines</p>
-                <h1>
-                  TYPE
-                  <br />
-                  ARCADE
-                </h1>
-                <p className="lede">
-                  Enemies march in from the right, each carrying a word over its head.{' '}
-                  <strong>Type the word</strong> — every correct letter is a bullet from the
-                  hero&apos;s rifle. Finish the word and the enemy falls.{' '}
-                  <strong>Type a wrong letter and that enemy fires back.</strong>
-                </p>
-                <div className="rules-mini">
-                  <div>
-                    <span className="rule-glyph ok">a →</span>
-                    <span>correct letter — hero fires</span>
-                  </div>
-                  <div>
-                    <span className="rule-glyph bad">a ✕</span>
-                    <span>wrong letter — the enemy fires back</span>
-                  </div>
-                </div>
-                <button
-                  className="cta"
-                  id="btnStart"
-                  type="button"
-                  onClick={e => {
-                    startGame();
-                    e.currentTarget.blur();
-                  }}
-                >
-                  ▶ &nbsp;START — then just type
-                </button>
-                <p className="fine">
-                  Full instructions live under <em>? HELP</em> in the top bar.
-                </p>
-              </div>
-            </div>
-
-            {/* PAUSE */}
-            <div className="overlay" id="pauseOverlay" hidden={hud.mode !== 'paused'}>
-              <div className="overlay-card small">
-                <p className="cap accent-cap">Held</p>
-                <h2>PAUSED</h2>
-                <p className="lede">The line is holding. Breathe.</p>
-                <button
-                  className="cta"
-                  id="btnResume"
-                  type="button"
-                  onClick={e => {
-                    togglePause();
-                    e.currentTarget.blur();
-                  }}
-                >
-                  ▶ &nbsp;RESUME
-                </button>
-                <p className="fine">
-                  <kbd>Esc</kbd> also resumes
-                </p>
-              </div>
-            </div>
-
-            {/* GAME OVER */}
-            <div className="overlay" id="overOverlay" hidden={hud.mode !== 'over'}>
-              <div className="overlay-card small">
-                <p className="cap accent-cap">The hero is down</p>
-                <h2>GAME OVER</h2>
-                <div className="final-stats" id="finalStats">
-                  <div>
-                    <span className="cap">Score</span>
-                    <b>{hud.score.toLocaleString()}</b>
-                  </div>
-                  <div>
-                    <span className="cap">Enemies down</span>
-                    <b>{hud.kills}</b>
-                  </div>
-                  <div>
-                    <span className="cap">Wave reached</span>
-                    <b>{hud.wave}</b>
-                  </div>
-                  <div>
-                    <span className="cap">Accuracy</span>
-                    <b>{hud.acc}%</b>
-                  </div>
-                  <div>
-                    <span className="cap">Speed</span>
-                    <b>{hud.wpm} wpm</b>
-                  </div>
-                  <div>
-                    <span className="cap">Best streak</span>
-                    <b>×{hud.bestStreak}</b>
-                  </div>
-                </div>
-                <button
-                  className="cta"
-                  id="btnAgain"
-                  type="button"
-                  onClick={e => {
-                    startGame();
-                    e.currentTarget.blur();
-                  }}
-                >
-                  ↻ &nbsp;PLAY AGAIN
-                </button>
-                <p className="fine">
-                  <kbd>Enter</kbd> also restarts
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* ── TYPING CONSOLE ── */}
-          <div className="console" id="consoleBar">
-            <div className="console-target">
-              <span className="cap">Target</span>
-              <div
-                className={`target-word mono${hud.targetIsLine ? ' phrase' : ''}`}
-                id="targetWord"
-                aria-live="polite"
-              >
-                {hud.targetWord ? (
-                  [...hud.targetWord].map((ch, i) => {
-                    const glyph = ch === ' ' ? '␣' : ch;
-                    const cls =
-                      i < hud.targetProgress
-                        ? hud.targetMarks[i] === false
-                          ? 'wronged'
-                          : 'done'
-                        : i === hud.targetProgress
-                          ? 'cur'
-                          : 'todo';
-                    return (
-                      <span key={i} className={cls}>
-                        {glyph}
-                      </span>
-                    );
-                  })
-                ) : (
-                  <span className="tw-empty">— waiting for the next word —</span>
-                )}
-              </div>
-            </div>
-
-            <div
-              className={`console-feedback mono${feedbackKind ? ` ${feedbackKind}` : ''}`}
-              id="feedback"
-              aria-live="polite"
-            >
-              {feedbackHtml.split(/(<b>.*?<\/b>|<kbd>.*?<\/kbd>)/g).map((part, idx) => {
-                if (part.startsWith('<b>') && part.endsWith('</b>')) {
-                  return <b key={idx}>{part.slice(3, -4)}</b>;
-                }
-                if (part.startsWith('<kbd>') && part.endsWith('</kbd>')) {
-                  return <kbd key={idx}>{part.slice(5, -6)}</kbd>;
-                }
-                return <React.Fragment key={idx}>{part}</React.Fragment>;
-              })}
-            </div>
-
+        {/* Workspace Switcher: Home, Type Arcade & Typing Defense */}
+        <div className="workspace-bar">
+          <div className="mode-switch" role="tablist" aria-label="Game workspace">
             <button
-              className="tool console-key"
-              id="btnKeyboard"
               type="button"
-              title="Open the touch / on-screen keyboard"
-              onClick={handleKeyboardClick}
+              role="tab"
+              aria-selected={activeView === 'home'}
+              className={`mode-tab mono${activeView === 'home' ? ' active' : ''}`}
+              onClick={e => {
+                switchView('home');
+                e.currentTarget.blur();
+              }}
             >
-              ⌨ TYPE HERE
+              ⌂ HOME
             </button>
-
-            <input
-              ref={mobileInputRef}
-              id="mobileInput"
-              className={`mobile-input${mobileLive ? ' live' : ''}`}
-              type="text"
-              autoComplete="off"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-label="Type here"
-              onChange={handleMobileInput}
-            />
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === 'arcade'}
+              className={`mode-tab mono${activeView === 'arcade' ? ' active' : ''}`}
+              onClick={e => {
+                switchView('arcade');
+                e.currentTarget.blur();
+              }}
+            >
+              ▸ TYPE ARCADE
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === 'defense'}
+              className={`mode-tab mono${activeView === 'defense' ? ' active' : ''}`}
+              onClick={e => {
+                switchView('defense');
+                e.currentTarget.blur();
+              }}
+            >
+              ⛨ TYPING DEFENSE
+            </button>
           </div>
-        </section>
+
+          <span className="cap dim workspace-note">
+            {activeView === 'home'
+              ? 'desktop & mobile arcade · choose a typing game'
+              : activeView === 'arcade'
+                ? 'stick-figure firing line · D3 WPM trend on game over'
+                : 'isometric keep & 3 lanes · keys 1–3 build turrets'}
+          </span>
+        </div>
+
+        {activeView === 'home' ? (
+          <HomeLanding
+            dailyChallenge={dailyChallenge}
+            dailyProgress={dailyProgress}
+            onGoArcade={daily => {
+              if (typeof daily === 'boolean') {
+                selectArcadeVariant(daily ? 'daily' : 'standard');
+              }
+              switchView('arcade');
+            }}
+            onGoDefense={daily => {
+              if (typeof daily === 'boolean') {
+                setDefenseVariant(daily ? 'daily' : 'standard');
+              }
+              switchView('defense');
+            }}
+            onOpenTutorial={openTutorial}
+          />
+        ) : activeView === 'arcade' ? (
+          <>
+            <HudBar hud={hud} streakPop={streakPop} />
+
+            <section className="stage-wrap">
+              <div className="stage-head">
+                <span className="cap">
+                  {hud.mode !== 'menu' && hud.variant === 'daily' && hud.challengeName
+                    ? `Fig. 01 — Daily Challenge · ${hud.challengeName} (${hud.weaponLabel})`
+                    : 'Fig. 01 — The firing line'}
+                </span>
+                <span className="cap dim" id="stageReadout">
+                  {hud.readout}
+                </span>
+              </div>
+
+              <div className={`stage${shaking ? ' shake' : ''}`} id="stage">
+                <canvas
+                  ref={canvasRef}
+                  id="game"
+                  width={W}
+                  height={H}
+                  aria-label="Battlefield: a stick-figure hero on the left shooting typed letters at stick-figure enemies approaching from the right."
+                />
+
+                {waveBanner && (
+                  <div key={waveBanner.key} className="wave-banner" id="waveBanner">
+                    {waveBanner.text}
+                  </div>
+                )}
+
+                <div
+                  key={vignetteKey}
+                  className={`hit-vignette${vignetteKey > 0 ? ' on' : ''}`}
+                  id="hitVignette"
+                  aria-hidden="true"
+                />
+
+                {/* MENU */}
+                <div className="overlay" id="menuOverlay" hidden={hud.mode !== 'menu'}>
+                  <div className="overlay-card">
+                    <p className="cap accent-cap">
+                      {arcadeVariant === 'daily'
+                        ? `Daily Challenge · ${dailyChallenge.dateKey}`
+                        : 'A typing shooter · drawn with hairlines'}
+                    </p>
+                    <h1>
+                      TYPE
+                      <br />
+                      ARCADE
+                    </h1>
+
+                    <div className="variant-switch" role="tablist" aria-label="Game ruleset">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={arcadeVariant === 'standard'}
+                        className={`variant-tab mono${arcadeVariant === 'standard' ? ' active' : ''}`}
+                        onClick={() => selectArcadeVariant('standard')}
+                      >
+                        Standard
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={arcadeVariant === 'daily'}
+                        className={`variant-tab mono${arcadeVariant === 'daily' ? ' active' : ''}`}
+                        onClick={() => selectArcadeVariant('daily')}
+                      >
+                        Daily: {dailyChallenge.weaponLabel}
+                      </button>
+                    </div>
+
+                    {arcadeVariant === 'daily' ? (
+                      <div className="challenge-brief">
+                        <strong>{dailyChallenge.name}</strong>
+                        <p>{dailyChallenge.weaponDesc}</p>
+                        <span className="mono challenge-mods">
+                          Speed ×{dailyChallenge.enemySpeedMul} · Start HP {dailyChallenge.startingHp} · Score ×{dailyChallenge.scoreMul}
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="lede">
+                          Enemies march in from the right, each carrying a word over its head.{' '}
+                          <strong>Type the word</strong> — every correct letter is a bullet from the
+                          hero&apos;s rifle. Finish the word and the enemy falls.{' '}
+                          <strong>Type a wrong letter and that enemy fires back.</strong>
+                        </p>
+                        <div className="rules-mini">
+                          <div>
+                            <span className="rule-glyph ok">a →</span>
+                            <span>correct letter — hero fires</span>
+                          </div>
+                          <div>
+                            <span className="rule-glyph bad">a ✕</span>
+                            <span>wrong letter — the enemy fires back</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <button
+                      className="cta"
+                      id="btnStart"
+                      type="button"
+                      onClick={e => {
+                        startGame();
+                        e.currentTarget.blur();
+                      }}
+                    >
+                      ▶ &nbsp;{arcadeVariant === 'daily' ? 'START CHALLENGE — just type' : 'START — then just type'}
+                    </button>
+                    <p className="fine">
+                      Full instructions live under <em>? HELP</em> in the top bar.
+                    </p>
+                  </div>
+                </div>
+
+                {/* PAUSE */}
+                <div className="overlay" id="pauseOverlay" hidden={hud.mode !== 'paused'}>
+                  <div className="overlay-card small">
+                    <p className="cap accent-cap">Held</p>
+                    <h2>PAUSED</h2>
+                    <p className="lede">The line is holding. Breathe.</p>
+                    <button
+                      className="cta"
+                      id="btnResume"
+                      type="button"
+                      onClick={e => {
+                        togglePause();
+                        e.currentTarget.blur();
+                      }}
+                    >
+                      ▶ &nbsp;RESUME
+                    </button>
+                    <p className="fine">
+                      <kbd>Esc</kbd> also resumes
+                    </p>
+                  </div>
+                </div>
+
+                {/* GAME OVER */}
+                <div className="overlay" id="overOverlay" hidden={hud.mode !== 'over'}>
+                  <div className="overlay-card over-wide">
+                    <p className="cap accent-cap">The hero is down</p>
+                    <h2>GAME OVER</h2>
+                    <div className="final-stats" id="finalStats">
+                      <div>
+                        <span className="cap">Score</span>
+                        <b>{hud.score.toLocaleString()}</b>
+                      </div>
+                      <div>
+                        <span className="cap">Enemies down</span>
+                        <b>{hud.kills}</b>
+                      </div>
+                      <div>
+                        <span className="cap">Wave reached</span>
+                        <b>{hud.wave}</b>
+                      </div>
+                      <div>
+                        <span className="cap">Accuracy</span>
+                        <b>{hud.acc}%</b>
+                      </div>
+                      <div>
+                        <span className="cap">Speed</span>
+                        <b>{hud.wpm} wpm</b>
+                      </div>
+                      <div>
+                        <span className="cap">Best streak</span>
+                        <b>×{hud.bestStreak}</b>
+                      </div>
+                    </div>
+
+                    <WpmTrendChart samples={hud.wpmHistory} finalWpm={hud.wpm} />
+
+                    <SocialShareBar
+                      compact
+                      shareText={buildArcadeShareText(hud)}
+                      cardFilename={`hairline-arcade-wave-${hud.wave}.png`}
+                      renderCardPng={() => renderArcadeShareCardPng(hud, darkMode)}
+                    />
+
+                    <div className="over-actions">
+                      <button
+                        className="cta"
+                        id="btnAgain"
+                        type="button"
+                        onClick={e => {
+                          startGame();
+                          e.currentTarget.blur();
+                        }}
+                      >
+                        ↻ &nbsp;PLAY AGAIN
+                      </button>
+                      <p className="fine">
+                        <kbd>Enter</kbd> also restarts
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── TYPING CONSOLE ── */}
+              <div className="console" id="consoleBar">
+                <div className="console-target">
+                  <span className="cap">Target</span>
+                  <div
+                    className={`target-word mono${hud.targetIsLine ? ' phrase' : ''}`}
+                    id="targetWord"
+                    aria-live="polite"
+                  >
+                    {hud.targetWord ? (
+                      [...hud.targetWord].map((ch, i) => {
+                        const glyph = ch === ' ' ? '␣' : ch;
+                        const cls =
+                          i < hud.targetProgress
+                            ? hud.targetMarks[i] === false
+                              ? 'wronged'
+                              : 'done'
+                            : i === hud.targetProgress
+                              ? 'cur'
+                              : 'todo';
+                        return (
+                          <span key={i} className={cls}>
+                            {glyph}
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span className="tw-empty">— waiting for the next word —</span>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className={`console-feedback mono${feedbackKind ? ` ${feedbackKind}` : ''}`}
+                  id="feedback"
+                  aria-live="polite"
+                >
+                  {feedbackHtml.split(/(<b>.*?<\/b>|<kbd>.*?<\/kbd>)/g).map((part, idx) => {
+                    if (part.startsWith('<b>') && part.endsWith('</b>')) {
+                      return <b key={idx}>{part.slice(3, -4)}</b>;
+                    }
+                    if (part.startsWith('<kbd>') && part.endsWith('</kbd>')) {
+                      return <kbd key={idx}>{part.slice(5, -6)}</kbd>;
+                    }
+                    return <React.Fragment key={idx}>{part}</React.Fragment>;
+                  })}
+                </div>
+
+                <button
+                  className="tool console-key"
+                  id="btnKeyboard"
+                  type="button"
+                  title="Open the touch / on-screen keyboard"
+                  onClick={handleKeyboardClick}
+                >
+                  ⌨ TYPE HERE
+                </button>
+
+                <input
+                  ref={mobileInputRef}
+                  id="mobileInput"
+                  className={`mobile-input${mobileLive ? ' live' : ''}`}
+                  type="text"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-label="Type here"
+                  onChange={handleMobileInput}
+                />
+              </div>
+            </section>
+          </>
+        ) : (
+          <TypingDefenseView
+            ref={defenseRef}
+            darkMode={darkMode}
+            helpOpen={helpOpen}
+            audioOpen={audioOpen}
+            tutorialOpen={tutorialOpen}
+            variant={defenseVariant}
+            dailyChallenge={dailyChallenge}
+            onChangeVariant={setDefenseVariant}
+            onRunEnd={() => setDailyProgress(getDailyProgress())}
+            onCloseHelp={closeHelp}
+            onStateSync={setDefenseStatus}
+          />
+        )}
       </main>
 
-      <HelpDrawer
-        open={helpOpen}
-        closeBtnRef={helpCloseBtnRef}
-        onClose={closeHelp}
+      {activeView !== 'defense' && (
+        <HelpDrawer
+          open={helpOpen}
+          closeBtnRef={helpCloseBtnRef}
+          onClose={closeHelp}
+        />
+      )}
+
+      <AudioSettingsDrawer
+        open={audioOpen}
+        closeBtnRef={audioCloseBtnRef}
+        onClose={closeAudio}
       />
+
+      <OnboardingModal
+        open={tutorialOpen}
+        onClose={closeTutorial}
+        onCompleteGoToDefense={() => switchView('defense')}
+      />
+
+      {/* Mobile-native bottom thumb dock */}
+      <nav className="mobile-dock" aria-label="Mobile quick navigation">
+        <button
+          type="button"
+          className={`dock-btn mono${activeView === 'home' ? ' active' : ''}`}
+          onClick={() => switchView('home')}
+        >
+          <span className="dock-ico" aria-hidden="true">⌂</span>
+          <span>Home</span>
+        </button>
+        <button
+          type="button"
+          className={`dock-btn mono${activeView === 'arcade' ? ' active' : ''}`}
+          onClick={() => switchView('arcade')}
+        >
+          <span className="dock-ico" aria-hidden="true">▸</span>
+          <span>Arcade</span>
+        </button>
+        <button
+          type="button"
+          className={`dock-btn mono${activeView === 'defense' ? ' active' : ''}`}
+          onClick={() => switchView('defense')}
+        >
+          <span className="dock-ico" aria-hidden="true">⛨</span>
+          <span>Defense</span>
+        </button>
+        <button
+          type="button"
+          className="dock-btn mono"
+          onClick={openTutorial}
+        >
+          <span className="dock-ico" aria-hidden="true">◈</span>
+          <span>Tour</span>
+        </button>
+      </nav>
     </>
   );
 }

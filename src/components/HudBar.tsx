@@ -17,12 +17,12 @@ export const HudBar: React.FC<HudBarProps> = ({ hud, streakPop }) => {
             role="progressbar"
             aria-label="Hero health"
             aria-valuemin={0}
-            aria-valuemax={100}
+            aria-valuemax={hud.maxHp}
             aria-valuenow={hud.hp}
           >
             <div
-              className={`hp-fill${hud.hp <= 30 ? ' low' : ''}`}
-              style={{ width: `${hud.hp}%` }}
+              className={`hp-fill${hud.hp <= Math.round(hud.maxHp * 0.3) ? ' low' : ''}`}
+              style={{ width: `${Math.min(100, Math.round((hud.hp / hud.maxHp) * 100))}%` }}
             />
           </div>
           <b className="mono">{hud.hp}</b>

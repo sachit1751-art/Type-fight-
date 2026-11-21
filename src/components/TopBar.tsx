@@ -1,13 +1,22 @@
 import React from 'react';
-import { GameMode } from '../game/types';
+
+export type WorkspaceView = 'home' | 'arcade' | 'defense';
 
 interface TopBarProps {
-  mode: GameMode;
+  activeView: WorkspaceView;
+  canPause: boolean;
+  isPaused: boolean;
+  canRestart: boolean;
   soundOn: boolean;
   darkMode: boolean;
   helpOpen: boolean;
+  audioOpen: boolean;
   helpBtnRef: React.RefObject<HTMLButtonElement | null>;
+  audioBtnRef: React.RefObject<HTMLButtonElement | null>;
+  onGoHome: () => void;
   onOpenHelp: () => void;
+  onOpenAudio: () => void;
+  onOpenTutorial: () => void;
   onToggleSound: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onToggleTheme: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onTogglePause: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -15,26 +24,42 @@ interface TopBarProps {
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
-  mode,
+  activeView,
+  canPause,
+  isPaused,
+  canRestart,
   soundOn,
   darkMode,
   helpOpen,
+  audioOpen,
   helpBtnRef,
+  audioBtnRef,
+  onGoHome,
   onOpenHelp,
+  onOpenAudio,
+  onOpenTutorial,
   onToggleSound,
   onToggleTheme,
   onTogglePause,
   onRestart,
 }) => {
-  const canPause = mode === 'playing' || mode === 'paused';
+  const brandSub =
+    activeView === 'defense'
+      ? 'TYPING DEFENSE'
+      : activeView === 'arcade'
+        ? 'TYPE ARCADE'
+        : 'TYPING ARCADE';
 
   return (
     <header className="topbar">
       <a
         className="brand"
-        href="#top"
-        aria-label="Hairline Type Arcade — home"
-        onClick={e => e.preventDefault()}
+        href="#home"
+        aria-label="Hairline Typing Arcade — home"
+        onClick={e => {
+          e.preventDefault();
+          onGoHome();
+        }}
       >
         <svg className="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
           <circle cx="14" cy="10" r="5" />
@@ -42,10 +67,22 @@ export const TopBar: React.FC<TopBarProps> = ({
         </svg>
         <span className="brand-word">HAIRLINE</span>
         <span className="brand-sep">/</span>
-        <span className="brand-sub">TYPE&nbsp;ARCADE</span>
+        <span className="brand-sub">{brandSub}</span>
       </a>
 
       <nav className="top-actions" aria-label="Game controls">
+        <button
+          id="btnTutorial"
+          className="tool"
+          type="button"
+          title="Interactive 4-step game tour"
+          onClick={e => {
+            onOpenTutorial();
+            e.currentTarget.blur();
+          }}
+        >
+          ◈ TOUR
+        </button>
         <button
           ref={helpBtnRef}
           id="btnHelp"
@@ -69,6 +106,18 @@ export const TopBar: React.FC<TopBarProps> = ({
           {soundOn ? '♪ SOUND: ON' : '♪ SOUND: OFF'}
         </button>
         <button
+          ref={audioBtnRef}
+          id="btnAudioSettings"
+          className="tool"
+          type="button"
+          title="Master volume & SFX category mixer"
+          aria-haspopup="dialog"
+          aria-expanded={audioOpen}
+          onClick={onOpenAudio}
+        >
+          ⚙ AUDIO
+        </button>
+        <button
           id="btnTheme"
           className="tool"
           type="button"
@@ -86,13 +135,14 @@ export const TopBar: React.FC<TopBarProps> = ({
           disabled={!canPause}
           onClick={onTogglePause}
         >
-          {mode === 'paused' ? '▶ RESUME' : 'Ⅱ PAUSE'}
+          {isPaused ? '▶ RESUME' : 'Ⅱ PAUSE'}
         </button>
         <button
           id="btnRestart"
           className="tool"
           type="button"
           title="Restart run"
+          disabled={!canRestart}
           onClick={onRestart}
         >
           ↻ RESTART

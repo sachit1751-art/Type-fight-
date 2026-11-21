@@ -1,4 +1,5 @@
 import { SFX } from './audio';
+import { DailyChallenge, PlayVariant } from './challenge';
 import {
   BubbleRect,
   Bullet,
@@ -39,16 +40,26 @@ export function createPillars(): Pillar[] {
   return pillars;
 }
 
-export function freshState(): GameState {
+export function freshState(
+  variant: PlayVariant = 'standard',
+  challenge: DailyChallenge | null = null
+): GameState {
+  const startHp = variant === 'daily' && challenge ? challenge.startingHp : 100;
+  const maxHp = variant === 'daily' && challenge ? challenge.maxHp : 100;
   return {
     mode: 'menu',
+    variant,
+    challenge: variant === 'daily' ? challenge : null,
+    weapon: variant === 'daily' && challenge ? challenge.weapon : 'standard',
+    weaponCharge: 0,
     time: 0,
     runTime: 0,
     lastTs: 0,
-    hero: { hp: 100, recoil: 0, flashT: 0, hurtT: 0, muzzleT: 0, deadT: 0, phase: 0 },
+    hero: { hp: startHp, maxHp, recoil: 0, flashT: 0, hurtT: 0, muzzleT: 0, deadT: 0, phase: 0 },
     activeId: null,
     enemies: [],
     bullets: [],
+    beams: [],
     particles: [],
     floats: [],
     spawnT: 0.35,
@@ -64,6 +75,8 @@ export function freshState(): GameState {
     shake: 0,
     nextId: 1,
     overT: 0,
+    wpmHistory: [{ t: 0, wpm: 0 }],
+    wpmSampleT: 1.5,
   };
 }
 
@@ -103,12 +116,22 @@ export interface EngineCallbacks {
 export function spawnEnemy(G: GameState, cb: EngineCallbacks): void {
   const wave = G.wave;
   const r = Math.random();
-  const type: EnemyType = G.kills === 0
-    ? 'walker'
-    : (r < 0.16 + wave * 0.012 ? 'brute' : r < 0.46 ? 'runner' : 'walker');
+  const bias = G.challenge?.bias ?? 'balanced';
+  let type: EnemyType;
+  if (G.kills === 0) {
+    type = 'walker';
+  } else if (bias === 'runner') {
+    type = r < 0.14 + wave * 0.01 ? 'brute' : r < 0.72 ? 'runner' : 'walker';
+  } else if (bias === 'brute') {
+    type = r < 0.36 + wave * 0.018 ? 'brute' : r < 0.56 ? 'runner' : 'walker';
+  } else {
+    type = r < 0.16 + wave * 0.012 ? 'brute' : r < 0.46 ? 'runner' : 'walker';
+  }
+
   const lane = LANES[Math.floor(Math.random() * LANES.length)];
   const typeMul = type === 'runner' ? 1.5 : type === 'brute' ? 0.62 : 1;
   const scaleMul = type === 'runner' ? 0.82 : type === 'brute' ? 1.24 : 1;
+  const challengeSpeedMul = G.challenge?.enemySpeedMul ?? 1;
 
   const linesUnlocked = wave >= 3 || G.runTime >= 75;
   const isLine = linesUnlocked && type !== 'runner' && Math.random() < 0.34;
@@ -139,7 +162,7 @@ export function spawnEnemy(G: GameState, cb: EngineCallbacks): void {
     x: spawnX,
     gy: lane.gy,
     s: lane.s * scaleMul,
-    speed: (30 + wave * 2.1 + rand(0, 10)) * typeMul * (isLine ? 0.72 : 1),
+    speed: (30 + wave * 2.1 + rand(0, 10)) * typeMul * challengeSpeedMul * (isLine ? 0.72 : 1),
     phase: rand(0, Math.PI * 2),
     state: 'alive',
     deathT: 0,
@@ -225,10 +248,16 @@ function doShake(G: GameState, n: number, cb: EngineCallbacks): void {
   cb.onShake();
 }
 
-export function fireHeroBullet(G: GameState, enemy: Enemy, ch: string, isFinal: boolean): void {
+export function fireHeroBullet(
+  G: GameState,
+  enemy: Enemy,
+  ch: string,
+  isFinal: boolean,
+  opts?: { isRail?: boolean; isSplit?: boolean; playSfx?: boolean }
+): void {
   const hp = heroPose(G);
-  G.hero.recoil = 5;
-  G.hero.muzzleT = 0.07;
+  G.hero.recoil = opts?.isRail ? 9 : 5;
+  G.hero.muzzleT = opts?.isRail ? 0.14 : 0.07;
   G.bullets.push({
     from: 'hero',
     x: hp.muzzle.x,
@@ -236,10 +265,26 @@ export function fireHeroBullet(G: GameState, enemy: Enemy, ch: string, isFinal: 
     target: enemy,
     ch,
     isFinal,
-    speed: 780,
+    speed: opts?.isRail ? 1280 : 780,
     trail: [],
+    isRail: opts?.isRail,
+    isSplit: opts?.isSplit,
   });
-  SFX.shoot();
+  if (opts?.isRail) {
+    G.beams.push({
+      x1: hp.muzzle.x,
+      y1: hp.muzzle.y,
+      x2: enemy.x,
+      y2: enemy.gy - 42 * enemy.s,
+      life: 0,
+      max: 0.22,
+    });
+  }
+  if (opts?.playSfx !== false) {
+    if (opts?.isRail) SFX.rail();
+    else if (opts?.isSplit) SFX.scatter();
+    else SFX.shoot();
+  }
 }
 
 export function fireEnemyBullet(G: GameState, enemy: Enemy): void {
@@ -260,7 +305,8 @@ export function fireEnemyBullet(G: GameState, enemy: Enemy): void {
 
 function addScore(G: GameState, n: number, x: number, y: number): void {
   const mult = 1 + Math.floor(G.streak / 12);
-  const gain = n * mult;
+  const cMul = G.challenge?.scoreMul ?? 1;
+  const gain = Math.round(n * mult * cMul);
   G.score += gain;
   if (n >= 10 && Math.random() < 0.4) {
     floatText(G, x, y, `+${gain}`, 'good');
@@ -282,7 +328,8 @@ export function finishEnemy(G: GameState, e: Enemy, cb: EngineCallbacks): void {
   e.deathT = 0;
   if (G.activeId === e.id) G.activeId = null;
   G.kills++;
-  const bonus = 30 + e.word.length * 5;
+  const cMul = G.challenge?.scoreMul ?? 1;
+  const bonus = Math.round((30 + e.word.length * 5) * cMul);
   G.score += bonus;
   floatText(G, e.x, e.gy - 96 * e.s, `${e.word}  +${bonus}`, 'kill');
   burst(G, e.x, e.gy - 40 * e.s, 18, false);
@@ -315,27 +362,91 @@ export function handleChar(G: GameState, raw: string, cb: EngineCallbacks): void
   const isCorrect = ch === expected;
   active.marks.push(isCorrect);
   active.progress++;
-  const isFinal = active.progress >= active.word.length;
-  const wrongs = active.marks.filter(m => !m).length;
-  if (isFinal) {
-    active.completed = true;
-    G.activeId = null;
-  }
+  let isFinal = active.progress >= active.word.length;
 
   const shown = (c: string) => (c === ' ' ? '␣ space' : c);
 
   if (isCorrect) {
     G.correct++;
     G.streak++;
+    G.weaponCharge++;
     G.bestStreak = Math.max(G.bestStreak, G.streak);
     cb.onStreakPop();
-    fireHeroBullet(G, active, ch, isFinal);
-    addScore(G, 10, active.x, active.gy - 92 * active.s);
 
+    // Custom weapon triggers in Daily Challenge mode
+    let weaponNote = '';
+    let firedRail = false;
+    if (G.weapon === 'rail' && G.weaponCharge % 4 === 0 && !isFinal) {
+      // Pierce an extra letter immediately
+      active.marks.push(true);
+      active.progress++;
+      isFinal = active.progress >= active.word.length;
+      firedRail = true;
+      weaponNote = ' · <b>RAIL ×2</b>';
+      floatText(G, active.x, active.gy - 108 * active.s, 'RAIL ×2', 'good');
+    } else if (G.weapon === 'hyper' && G.weaponCharge % 2 === 0 && !isFinal) {
+      active.marks.push(true);
+      active.progress++;
+      isFinal = active.progress >= active.word.length;
+      weaponNote = ' · <b>HYPER ×2</b>';
+      floatText(G, active.x, active.gy - 108 * active.s, 'HYPER ×2', 'good');
+    }
+
+    if (isFinal) {
+      active.completed = true;
+      G.activeId = null;
+    }
+
+    fireHeroBullet(G, active, ch, isFinal, { isRail: firedRail });
+    addScore(G, firedRail ? 20 : 10, active.x, active.gy - 92 * active.s);
+
+    // Secondary multi-target weapons (Twin-Bolt / Scattergun)
+    if (G.weapon === 'twin' && G.weaponCharge % 3 === 0) {
+      const other = G.enemies
+        .filter(e => e.id !== active.id && e.state === 'alive' && !e.completed)
+        .sort((a, b) => a.x - b.x)[0];
+      if (other) {
+        const hitChar = other.word[other.progress] ?? '';
+        other.marks.push(true);
+        other.progress++;
+        const otherFinal = other.progress >= other.word.length;
+        if (otherFinal) {
+          other.completed = true;
+          if (G.activeId === other.id) G.activeId = null;
+        }
+        fireHeroBullet(G, other, hitChar, otherFinal, { isSplit: true, playSfx: false });
+        floatText(G, other.x, other.gy - 106 * other.s, 'TWIN', 'good');
+        weaponNote = ' · <b>TWIN-BOLT</b>';
+      }
+    } else if (G.weapon === 'scatter' && G.weaponCharge % 4 === 0) {
+      const others = G.enemies
+        .filter(e => e.id !== active.id && e.state === 'alive' && !e.completed)
+        .sort((a, b) => a.x - b.x)
+        .slice(0, 2);
+      if (others.length) {
+        SFX.scatter();
+        for (const o of others) {
+          const hitChar = o.word[o.progress] ?? '';
+          o.marks.push(true);
+          o.progress++;
+          const oFinal = o.progress >= o.word.length;
+          if (oFinal) {
+            o.completed = true;
+            if (G.activeId === o.id) G.activeId = null;
+          }
+          fireHeroBullet(G, o, hitChar, oFinal, { isSplit: true, playSfx: false });
+          floatText(G, o.x, o.gy - 106 * o.s, 'SCATTER', 'good');
+        }
+        weaponNote = ' · <b>SCATTER</b>';
+      }
+    }
+
+    const wrongs = active.marks.filter(m => !m).length;
     if (isFinal) {
       let shieldMsg = '';
       if (wrongs === 0) {
-        const healed = Math.min(2, 100 - G.hero.hp);
+        const healAmt = G.challenge?.cleanHeal ?? 2;
+        const healed = Math.min(healAmt, G.hero.maxHp - G.hero.hp);
         if (healed > 0) {
           G.hero.hp += healed;
           floatText(G, HERO_X + 18, HERO_GY - 104, `+${healed} HP`, 'good');
@@ -354,17 +465,23 @@ export function handleChar(G: GameState, raw: string, cb: EngineCallbacks): void
         G.shield.cleanWords = 0;
       }
       cb.onFeedback(
-        `“${active.word}” finished${wrongs ? ` with ${wrongs} miss${wrongs > 1 ? 'es' : ''}` : ' — clean'}! Next word up.${shieldMsg}`,
+        `“${active.word}” finished${wrongs ? ` with ${wrongs} miss${wrongs > 1 ? 'es' : ''}` : ' — clean'}! Next word up.${shieldMsg}${weaponNote}`,
         wrongs ? '' : 'good'
       );
     } else {
-      cb.onFeedback(`<b>${shown(ch)}</b> ✓ — hit inbound · streak ×${G.streak}`, 'good');
+      cb.onFeedback(`<b>${shown(ch)}</b> ✓ — hit inbound · streak ×${G.streak}${weaponNote}`, 'good');
     }
   } else {
+    const wrongs = active.marks.filter(m => !m).length;
+    if (isFinal) {
+      active.completed = true;
+      G.activeId = null;
+    }
     const hadShield = G.shield.active;
     G.shield.active = false;
     G.shield.cleanWords = 0;
     G.streak = 0;
+    G.weaponCharge = 0;
     active.shakeT = 0.3;
     fireEnemyBullet(G, active);
     SFX.wrong();
@@ -389,7 +506,7 @@ function bulletHit(G: GameState, b: Bullet, cb: EngineCallbacks): void {
     const e = b.target;
     if (!e || e.state !== 'alive') return;
     e.flashT = 0.16;
-    e.kb = 26;
+    e.kb = b.isRail ? 38 : 26;
     burst(G, e.x, e.gy - 42 * e.s, b.isFinal ? 16 : 7, false);
     SFX.hit();
     if (b.isFinal) finishEnemy(G, e, cb);
@@ -399,11 +516,12 @@ function bulletHit(G: GameState, b: Bullet, cb: EngineCallbacks): void {
     floatText(G, HERO_X + 26, HERO_GY - 96, '⬡ BLOCKED', 'good');
     SFX.block();
   } else {
-    G.hero.hp = Math.max(0, G.hero.hp - 8);
+    const dmg = G.challenge?.typoDmgArcade ?? 8;
+    G.hero.hp = Math.max(0, G.hero.hp - dmg);
     G.hero.hurtT = 0.3;
     G.hero.flashT = 0.2;
     burst(G, HERO_X + 6, HERO_GY - 42, 10, true);
-    floatText(G, HERO_X + 16, HERO_GY - 96, '−8 HP', 'bad');
+    floatText(G, HERO_X + 16, HERO_GY - 96, `−${dmg} HP`, 'bad');
     cb.onHitVignette();
     doShake(G, 1, cb);
     SFX.hurt();
@@ -415,6 +533,10 @@ function bulletHit(G: GameState, b: Bullet, cb: EngineCallbacks): void {
 }
 
 function stepFx(G: GameState, dt: number): void {
+  for (const beam of G.beams) {
+    beam.life += dt;
+  }
+  G.beams = G.beams.filter(bm => bm.life < bm.max);
   for (const p of G.particles) {
     p.life += dt;
     p.x += p.vx * dt;
@@ -447,6 +569,12 @@ export function updateGame(G: GameState, dt: number, cb: EngineCallbacks): void 
     stepFx(G, dt);
     if (G.overT > 0.85) {
       G.mode = 'over';
+      const mins = G.runTime / 60;
+      const finalWpm = mins > 0.04 ? Math.round((G.correct / 5) / mins) : 0;
+      const lastPt = G.wpmHistory[G.wpmHistory.length - 1];
+      if (!lastPt || G.runTime - lastPt.t > 0.25) {
+        G.wpmHistory.push({ t: Math.round(G.runTime * 10) / 10, wpm: finalWpm });
+      }
       cb.onGameOver();
     }
     return;
@@ -458,12 +586,20 @@ export function updateGame(G: GameState, dt: number, cb: EngineCallbacks): void 
   }
 
   G.runTime += dt;
+  G.wpmSampleT -= dt;
+  if (G.wpmSampleT <= 0) {
+    G.wpmSampleT = 1.5;
+    const mins = G.runTime / 60;
+    const curWpm = mins > 0.04 ? Math.round((G.correct / 5) / mins) : 0;
+    G.wpmHistory.push({ t: Math.round(G.runTime * 10) / 10, wpm: curWpm });
+  }
 
   G.spawnT -= dt;
   const cap = Math.min(6, 3 + G.wave);
+  const spawnMul = G.challenge?.spawnMul ?? 1;
   if (G.spawnT <= 0 && aliveEnemies(G).length < cap) {
     spawnEnemy(G, cb);
-    G.spawnT = Math.max(1.05, 2.55 - G.wave * 0.15) * rand(0.75, 1.25);
+    G.spawnT = Math.max(1.05, 2.55 - G.wave * 0.15) * spawnMul * rand(0.75, 1.25);
   }
 
   for (const e of G.enemies) {
@@ -532,7 +668,12 @@ export function getHudSnapshot(G: GameState): HudSnapshot {
 
   return {
     mode: G.mode,
+    variant: G.variant,
+    challengeName: G.challenge?.name ?? null,
+    weapon: G.weapon,
+    weaponLabel: G.challenge?.weaponLabel ?? 'Standard Rifle',
     hp: G.hero.hp,
+    maxHp: G.hero.maxHp,
     score: G.score,
     wave: G.wave,
     kills: G.kills,
@@ -548,6 +689,7 @@ export function getHudSnapshot(G: GameState): HudSnapshot {
     targetProgress: t ? t.progress : 0,
     targetMarks: t ? [...t.marks] : [],
     targetIsLine: t ? t.isLine : false,
+    wpmHistory: [...G.wpmHistory],
   };
 }
 
@@ -962,17 +1104,30 @@ export function drawGame(
     if (rect) drawWordBubble(ctx, e, target === e, P, rect);
   }
 
+  for (const bm of G.beams) {
+    const k = 1 - bm.life / bm.max;
+    ctx.save();
+    ctx.globalAlpha = k;
+    setStroke(ctx, P.hi, 2.2 * k);
+    line(ctx, bm.x1, bm.y1, bm.x2, bm.y2);
+    setStroke(ctx, P.accent, 0.9);
+    ctx.setLineDash([4, 4]);
+    line(ctx, bm.x1, bm.y1 - 2, bm.x2, bm.y2 - 2);
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   for (const b of G.bullets) {
     const isHero = b.from === 'hero';
-    setStroke(ctx, isHero ? P.hi : P.accent, isHero ? 1.4 : 1.6);
+    setStroke(ctx, isHero ? P.hi : P.accent, b.isRail ? 2.1 : (isHero ? 1.4 : 1.6));
     for (let i = 1; i < b.trail.length; i++) {
-      ctx.globalAlpha = (i / b.trail.length) * 0.4;
+      ctx.globalAlpha = (i / b.trail.length) * (b.isRail ? 0.7 : 0.4);
       line(ctx, b.trail[i - 1].x, b.trail[i - 1].y, b.trail[i].x, b.trail[i].y);
     }
     ctx.globalAlpha = 1;
     ctx.fillStyle = isHero ? P.hi : P.accent;
     ctx.beginPath();
-    ctx.arc(b.x, b.y, isHero ? 2.1 : 2.5, 0, Math.PI * 2);
+    ctx.arc(b.x, b.y, b.isRail ? 3.2 : (b.isSplit ? 2.4 : (isHero ? 2.1 : 2.5)), 0, Math.PI * 2);
     ctx.fill();
     if (isHero && b.ch) {
       ctx.font = '600 11px ui-monospace, monospace';

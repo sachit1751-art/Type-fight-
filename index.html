@@ -3,12 +3,78 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HAIRLINE — Type Arcade</title>
-    <meta name="description" content="A stick-figure typing shooter drawn in the hairline illustration style. Every correct letter is a bullet. Every miss fires back." />
-    <meta property="og:title" content="HAIRLINE — Type Arcade" />
-    <meta property="og:description" content="A stick-figure typing shooter drawn in the hairline illustration style. Every correct letter is a bullet. Every miss fires back." />
+    <title>HAIRLINE — Type Arcade &amp; Typing Defense</title>
+    <meta
+      name="description"
+      content="Two minimalist hairline-illustrated typing games: hold the firing line in Type Arcade or command three turret lanes in Typing Defense, with live D3 WPM trend analytics."
+    />
+    <meta
+      name="keywords"
+      content="typing game, type arcade, typing defense, hairline typing, WPM speed game, browser typing shooter, isometric typing tower defense, D3 WPM chart"
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#08090a" media="(prefers-color-scheme: dark)" />
+    <link rel="canonical" href="https://hairlinetyping.vercel.app/" />
+    <link rel="alternate" type="text/plain" title="LLMs Context" href="/llms.txt" />
+
+    <!-- OpenGraph -->
+    <meta property="og:site_name" content="HAIRLINE" />
+    <meta property="og:title" content="HAIRLINE — Type Arcade &amp; Typing Defense" />
+    <meta
+      property="og:description"
+      content="Hold the firing line in Type Arcade or defend the isometric keep in Typing Defense. Zero-backspace typing, lane turrets, clean-word shields, and D3 WPM analytics."
+    />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://hairlinetyping.vercel.app/" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X Cards -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HAIRLINE — Type Arcade &amp; Typing Defense" />
+    <meta
+      name="twitter:description"
+      content="Two minimalist hairline typing games with turrets, shields, synthesized Web Audio, and post-run D3 WPM graphs."
+    />
+
+    <!-- Structured Data (Schema.org JSON-LD) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "name": "HAIRLINE — Type Arcade & Typing Defense",
+            "url": "https://hairlinetyping.vercel.app/",
+            "applicationCategory": "GameApplication",
+            "operatingSystem": "Web Browser",
+            "browserRequirements": "Requires JavaScript and HTML5 Canvas / SVG",
+            "description": "A dual minimalist typing game collection featuring Type Arcade (side-scroller shooter) and Typing Defense (isometric three-lane turret defense) with D3 WPM trend charts.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          },
+          {
+            "@type": "VideoGame",
+            "name": "HAIRLINE / Type Arcade",
+            "genre": ["Typing Game", "Arcade Shooter"],
+            "gamePlatform": "Web Browser",
+            "playMode": "SinglePlayer",
+            "description": "Stick-figure typing shooter where every correct letter fires a rifle round and every mistyped letter triggers enemy return fire."
+          },
+          {
+            "@type": "VideoGame",
+            "name": "HAIRLINE / Typing Defense",
+            "genre": ["Typing Game", "Tower Defense"],
+            "gamePlatform": "Web Browser",
+            "playMode": "SinglePlayer",
+            "description": "Isometric three-lane typing defense where players spend Ink on automated lane turrets and earn clean-word shields."
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
