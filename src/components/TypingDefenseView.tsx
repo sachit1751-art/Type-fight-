@@ -23,6 +23,7 @@ interface TypingDefenseViewProps {
   helpOpen: boolean;
   audioOpen: boolean;
   tutorialOpen: boolean;
+  fastRestart: boolean;
   variant: PlayVariant;
   dailyChallenge: DailyChallenge;
   onChangeVariant: (v: PlayVariant) => void;
@@ -89,6 +90,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
       helpOpen,
       audioOpen,
       tutorialOpen,
+      fastRestart,
       variant,
       dailyChallenge,
       onChangeVariant,
@@ -267,6 +269,20 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
           if (e.key === 'Enter') {
             e.preventDefault();
             startGame();
+            return;
+          }
+          if (hud.over && fastRestart && !(e.metaKey || e.ctrlKey || e.altKey)) {
+            if (/^[a-zA-Z ]$/.test(e.key)) {
+              e.preventDefault();
+              startGame();
+              return;
+            }
+            if (/^[123]$/.test(e.key)) {
+              e.preventDefault();
+              startGame();
+              controllerRef.current?.build(Number(e.key) - 1);
+              return;
+            }
           }
           return;
         }
@@ -302,7 +318,18 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
         window.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('blur', onBlur);
       };
-    }, [helpOpen, audioOpen, tutorialOpen, hud.running, hud.paused, onCloseHelp, startGame, togglePause]);
+    }, [
+      helpOpen,
+      audioOpen,
+      tutorialOpen,
+      fastRestart,
+      hud.running,
+      hud.paused,
+      hud.over,
+      onCloseHelp,
+      startGame,
+      togglePause,
+    ]);
 
     const handleMobileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
       const v = e.target.value;
@@ -578,7 +605,16 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
                       ↻ &nbsp;PLAY AGAIN
                     </button>
                     <p className="fine">
-                      <kbd>Enter</kbd> also restarts
+                      {fastRestart ? (
+                        <>
+                          Fast Restart ON — type <kbd>A–Z</kbd> to jump back in, or{' '}
+                          <kbd>Enter</kbd>
+                        </>
+                      ) : (
+                        <>
+                          <kbd>Enter</kbd> also restarts
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -667,109 +703,6 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
             />
           </div>
         </section>
-
-        {/* Typing Defense Help Drawer */}
-        <div className="help-backdrop" hidden={!helpOpen} onClick={onCloseHelp} />
-        <aside
-          className="help-panel"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="tdHelpTitle"
-          hidden={!helpOpen}
-        >
-          <div className="help-head">
-            <div>
-              <span className="cap">Hairline · Typing Defense</span>
-              <h2 id="tdHelpTitle">How to defend the keep</h2>
-            </div>
-            <button
-              className="tool"
-              type="button"
-              title="Close help (Esc)"
-              onClick={onCloseHelp}
-            >
-              ✕ CLOSE
-            </button>
-          </div>
-          <div className="help-body">
-            <section>
-              <span className="cap">01 · Type to fire</span>
-              <p>
-                Every walker down the lanes carries a word. Type its first letter to lock on and
-                shoot from the keep tower — one bolt per letter, and the figure breaks when the last
-                letter lands. Typing a different starting letter switches targets before a word is
-                underway.
-              </p>
-            </section>
-            <section>
-              <span className="cap">02 · A typo fires back</span>
-              <p>
-                A wrong letter never halts you: the walker fires a bolt back at the keep, your streak
-                resets, and the word advances to the next position. Every key counts and moves
-                forward — there is no backspace.
-              </p>
-            </section>
-            <section>
-              <span className="cap">03 · Ink &amp; turrets</span>
-              <p>
-                Every correct letter earns <b>1 ink</b>; every down walker pays a bounty; holding a
-                wave adds a bonus. Press <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd> (or tap a pad
-                button) to build or upgrade a turret on that lane: <b>25 / 45 / 70 ink</b>. Turrets
-                chip letters off the right end of approaching words.
-              </p>
-            </section>
-            <section>
-              <span className="cap">04 · Clean words &amp; shield</span>
-              <p>
-                A word finished without a typo heals <b>+2 HP</b> and grants <b>+3 ink</b>.{' '}
-                <b>Two clean words in a row</b> raise a shield around the keep that absorbs three
-                hits. A single typo drops it at once.
-              </p>
-            </section>
-            <section>
-              <span className="cap">05 · Walkers</span>
-              <div className="legend">
-                <div>
-                  <span className="legend-name">RUNNER</span>
-                  <span>fast, short word · +2 ink</span>
-                </div>
-                <div>
-                  <span className="legend-name">WALKER</span>
-                  <span>standard pace · +3 ink</span>
-                </div>
-                <div>
-                  <span className="legend-name">BRUTE</span>
-                  <span>slow, heavy blows, long word · +6 ink</span>
-                </div>
-                <div>
-                  <span className="legend-name">HERALD</span>
-                  <span>dashed sign — full phrases, spaces count · +6 ink</span>
-                </div>
-              </div>
-            </section>
-            <section>
-              <span className="cap">06 · Keys</span>
-              <div className="legend">
-                <div>
-                  <span className="legend-name">A–Z · SPACE</span>
-                  <span>shoot letters &amp; spaces</span>
-                </div>
-                <div>
-                  <span className="legend-name">1 · 2 · 3</span>
-                  <span>build / upgrade lane turret</span>
-                </div>
-                <div>
-                  <span className="legend-name">ESC</span>
-                  <span>pause / resume · closes panels</span>
-                </div>
-                <div>
-                  <span className="legend-name">ENTER</span>
-                  <span>start · play again</span>
-                </div>
-              </div>
-            </section>
-          </div>
-        </aside>
       </div>
     );
   }

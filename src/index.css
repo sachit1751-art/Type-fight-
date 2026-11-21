@@ -2032,6 +2032,192 @@ body.dark-plate .help-body p {
   flex-wrap: wrap;
 }
 
+/* ── visual keyboard shortcuts guide inside HelpDrawer ── */
+.kbd-guide {
+  margin-top: 10px;
+  display: grid;
+  gap: 12px;
+}
+
+.kbd-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kbd-status-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--hairline-edge);
+}
+
+.kbd-live-text {
+  color: var(--hairline-hi);
+  font-weight: 700;
+}
+
+.kbd-game-tabs {
+  margin: 0;
+}
+
+.kbd-board {
+  border: 1px solid var(--hairline-lo);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--hairline-plate);
+  display: grid;
+  gap: 7px;
+}
+
+.kbd-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.keycap-cluster {
+  display: flex;
+  gap: 5px;
+}
+
+.keycap {
+  border: 1px solid var(--hairline-edge);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--hairline-plate);
+  color: var(--hairline-edge);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  transition: border-color 160ms var(--ease), background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.keycap b {
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  line-height: 1.1;
+  color: var(--hairline-hi);
+}
+
+.keycap span {
+  font-size: 9px;
+  letter-spacing: .04em;
+  line-height: 1.1;
+  color: var(--hairline-edge);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keycap.active {
+  border-color: var(--hairline-hi);
+  background: var(--hairline-hi);
+}
+
+.keycap.active b,
+.keycap.active span {
+  color: var(--hairline-plate);
+}
+
+.keycap.active.fast {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.keycap.unused,
+.keycap-locked {
+  opacity: .42;
+  border-style: dashed;
+}
+
+.keycap-sq {
+  width: 36px;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.keycap-locked {
+  margin-left: auto;
+  text-align: right;
+}
+
+.keycap-wide {
+  flex: 1;
+}
+
+.keycap-enter {
+  min-width: 96px;
+}
+
+.keycap-space {
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kbd-legend {
+  display: grid;
+  gap: 6px;
+}
+
+.kbd-legend-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--hairline-lo);
+  font-size: 12px;
+}
+
+.kbd-legend-row.muted {
+  opacity: .52;
+}
+
+.kbd-keys {
+  flex: 0 0 76px;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  color: var(--hairline-hi);
+  font-weight: 700;
+}
+
+.kbd-legend-row.fast .kbd-keys {
+  color: var(--accent);
+}
+
+.kbd-desc {
+  flex: 1;
+  color: var(--hairline-edge);
+  line-height: 1.4;
+}
+
+.kbd-legend-row.active .kbd-desc {
+  color: var(--hairline-hi);
+}
+
+.kbd-state {
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--hairline-edge);
+}
+
+.kbd-legend-row.fast .kbd-state {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 /* mobile-native bottom thumb dock (hidden on desktop) */
 .mobile-dock {
   display: none;

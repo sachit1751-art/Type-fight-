@@ -10,6 +10,13 @@ import {
   SfxCategory,
   subscribeAudioSettings,
 } from '../game/audio';
+import {
+  getPreferences,
+  resetPreferences,
+  setFastRestart,
+  subscribePreferences,
+  UserPreferences,
+} from '../game/preferences';
 
 interface AudioSettingsDrawerProps {
   open: boolean;
@@ -45,10 +52,17 @@ export const AudioSettingsDrawer: React.FC<AudioSettingsDrawerProps> = ({
   onClose,
 }) => {
   const [audio, setAudio] = useState<AudioSettings>(() => getAudioSettings());
+  const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
 
   useEffect(() => {
     setAudio(getAudioSettings());
-    return subscribeAudioSettings(setAudio);
+    setPrefs(getPreferences());
+    const unsubAudio = subscribeAudioSettings(setAudio);
+    const unsubPrefs = subscribePreferences(setPrefs);
+    return () => {
+      unsubAudio();
+      unsubPrefs();
+    };
   }, []);
 
   useEffect(() => {
@@ -78,14 +92,14 @@ export const AudioSettingsDrawer: React.FC<AudioSettingsDrawerProps> = ({
       >
         <div className="help-head">
           <div>
-            <span className="cap">Audio Mixer · Type Arcade &amp; Typing Defense</span>
-            <h2 id="audioSettingsTitle">Sound settings</h2>
+            <span className="cap">Audio &amp; Gameplay · Type Arcade &amp; Typing Defense</span>
+            <h2 id="audioSettingsTitle">Audio &amp; Settings</h2>
           </div>
           <button
             ref={closeBtnRef}
             className="tool"
             type="button"
-            title="Close sound settings (Esc)"
+            title="Close settings (Esc)"
             onClick={onClose}
           >
             ✕ CLOSE
@@ -187,12 +201,42 @@ export const AudioSettingsDrawer: React.FC<AudioSettingsDrawerProps> = ({
             </div>
           </section>
 
+          {/* Gameplay Flow Controls */}
+          <section className="audio-section">
+            <span className="cap">Gameplay Controls</span>
+            <div className="audio-cat-list">
+              <div className="audio-cat-item">
+                <div className="audio-cat-copy">
+                  <strong>Fast Restart on Game Over</strong>
+                  <span>
+                    Jump straight back into action by typing any letter (<kbd>A–Z</kbd>) or{' '}
+                    <kbd>Space</kbd> on the Game Over screen, skipping overlay buttons.
+                  </span>
+                </div>
+                <div className="audio-cat-controls">
+                  <button
+                    id="toggleFastRestart"
+                    type="button"
+                    role="switch"
+                    aria-checked={prefs.fastRestart}
+                    aria-label="Toggle Fast Restart on Game Over"
+                    className={`audio-switch mono${prefs.fastRestart ? ' on' : ''}`}
+                    onClick={() => setFastRestart(!prefs.fastRestart)}
+                  >
+                    {prefs.fastRestart ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="audio-section audio-foot-actions">
             <button
               type="button"
               className="tool"
               onClick={e => {
                 resetAudioSettings();
+                resetPreferences();
                 previewAudioCategory('master');
                 e.currentTarget.blur();
               }}

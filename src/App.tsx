@@ -24,6 +24,7 @@ import {
   PlayVariant,
   recordDailyRun,
 } from './game/challenge';
+import { getPreferences, subscribePreferences } from './game/preferences';
 import {
   createPillars,
   drawGame,
@@ -86,6 +87,10 @@ export default function App() {
   darkRef.current = darkMode;
 
   const [soundOn, setSoundOn] = useState<boolean>(() => getAudioSettings().enabled);
+  const [fastRestart, setFastRestartState] = useState<boolean>(() => getPreferences().fastRestart);
+  const fastRestartRef = useRef(fastRestart);
+  fastRestartRef.current = fastRestart;
+
   const [helpOpen, setHelpOpen] = useState<boolean>(false);
   const helpOpenRef = useRef(helpOpen);
   helpOpenRef.current = helpOpen;
@@ -132,6 +137,13 @@ export default function App() {
   useEffect(() => {
     return subscribeAudioSettings(settings => {
       setSoundOn(settings.enabled);
+    });
+  }, []);
+
+  /* Keep Fast Restart preference synchronized with AudioSettingsDrawer */
+  useEffect(() => {
+    return subscribePreferences(prefs => {
+      setFastRestartState(prefs.fastRestart);
     });
   }, []);
 
@@ -211,7 +223,12 @@ export default function App() {
         const updated = recordDailyRun('arcade', G.challenge.dateKey, G.score, G.wave, G.kills);
         setDailyProgress(updated);
       }
-      triggerFeedback('the hero is down — press <b>PLAY AGAIN</b> or <kbd>Enter</kbd>', 'bad');
+      triggerFeedback(
+        fastRestartRef.current
+          ? 'the hero is down — <b>Fast Restart</b>: type any letter to jump back in'
+          : 'the hero is down — press <b>PLAY AGAIN</b> or <kbd>Enter</kbd>',
+        'bad'
+      );
       syncHudNow();
     },
   };
@@ -285,11 +302,9 @@ export default function App() {
       syncHudNow();
     }
     setHelpOpen(true);
-    if (activeViewRef.current !== 'defense') {
-      window.requestAnimationFrame(() => {
-        helpCloseBtnRef.current?.focus({ preventScroll: true });
-      });
-    }
+    window.requestAnimationFrame(() => {
+      helpCloseBtnRef.current?.focus({ preventScroll: true });
+    });
   }, [syncHudNow]);
 
   const closeHelp = useCallback(() => {
@@ -468,9 +483,27 @@ export default function App() {
         return;
       }
 
-      if (gameRef.current.mode !== 'playing') return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (document.activeElement === mobileInputRef.current) return;
+
+      if (
+        gameRef.current.mode === 'over' &&
+        fastRestartRef.current &&
+        e.key.length === 1 &&
+        /[a-zA-Z ]/.test(e.key)
+      ) {
+        e.preventDefault();
+        startGame();
+        if (/[a-zA-Z]/.test(e.key)) {
+          const lower = e.key.toLowerCase();
+          if (gameRef.current.enemies.some(en => en.word[0] === lower)) {
+            processChar(e.key);
+          }
+        }
+        return;
+      }
+
+      if (gameRef.current.mode !== 'playing') return;
 
       if (e.key.length === 1 && /[a-zA-Z ]/.test(e.key)) {
         e.preventDefault();
@@ -495,6 +528,21 @@ export default function App() {
   const handleMobileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     e.target.value = '';
+    if (!v) return;
+    if (gameRef.current.mode === 'over' && fastRestartRef.current) {
+      startGame();
+      const first = v[0];
+      if (/[a-zA-Z]/.test(first)) {
+        const lower = first.toLowerCase();
+        if (gameRef.current.enemies.some(en => en.word[0] === lower)) {
+          processChar(first);
+        }
+      }
+      for (const ch of v.slice(1)) {
+        processChar(ch);
+      }
+      return;
+    }
     for (const ch of v) {
       processChar(ch);
     }
@@ -847,7 +895,16 @@ export default function App() {
                         ↻ &nbsp;PLAY AGAIN
                       </button>
                       <p className="fine">
-                        <kbd>Enter</kbd> also restarts
+                        {fastRestart ? (
+                          <>
+                            Fast Restart ON — type <kbd>A–Z</kbd> to jump back in, or{' '}
+                            <kbd>Enter</kbd>
+                          </>
+                        ) : (
+                          <>
+                            <kbd>Enter</kbd> also restarts
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -934,6 +991,7 @@ export default function App() {
             helpOpen={helpOpen}
             audioOpen={audioOpen}
             tutorialOpen={tutorialOpen}
+            fastRestart={fastRestart}
             variant={defenseVariant}
             dailyChallenge={dailyChallenge}
             onChangeVariant={setDefenseVariant}
@@ -944,13 +1002,15 @@ export default function App() {
         )}
       </main>
 
-      {activeView !== 'defense' && (
-        <HelpDrawer
-          open={helpOpen}
-          closeBtnRef={helpCloseBtnRef}
-          onClose={closeHelp}
-        />
-      )}
+      <HelpDrawer
+        open={helpOpen}
+        activeView={activeView}
+        arcadeMode={hud.mode}
+        defenseStatus={defenseStatus}
+        fastRestart={fastRestart}
+        closeBtnRef={helpCloseBtnRef}
+        onClose={closeHelp}
+      />
 
       <AudioSettingsDrawer
         open={audioOpen}
