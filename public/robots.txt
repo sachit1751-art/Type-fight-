@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://hairlinetyping.vercel.app/sitemap.xml
+Sitemap: https://type-fg.sachit1751.workers.dev/sitemap.xml
