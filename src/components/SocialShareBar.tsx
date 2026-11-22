@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getFacebookShareUrl, getTwitterShareUrl } from '../game/shareCard';
 
 interface SocialShareBarProps {
@@ -16,6 +16,15 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
 }) => {
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [cardPreviewUrl, setCardPreviewUrl] = useState<string | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://hairlinetyping.vercel.app/';
   const twitterHref = getTwitterShareUrl(shareText, shareUrl);
@@ -23,7 +32,10 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
 
   const flashStatus = (msg: string) => {
     setStatusMsg(msg);
-    window.setTimeout(() => setStatusMsg(''), 3200);
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+    timerRef.current = window.setTimeout(() => setStatusMsg(''), 3200);
   };
 
   const handleCopyText = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -38,8 +50,17 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
 
   const handleInstagramExport = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.blur();
-    const dataUrl = renderCardPng();
-    if (!dataUrl) return;
+    let dataUrl = '';
+    try {
+      dataUrl = renderCardPng();
+    } catch {
+      flashStatus('Card export blocked by browser privacy settings');
+      return;
+    }
+    if (!dataUrl) {
+      flashStatus('Unable to render result card on this browser');
+      return;
+    }
 
     // Copy caption automatically so pasting into Instagram is effortless
     try {
@@ -68,14 +89,19 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
       }
     }
 
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = cardFilename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setCardPreviewUrl(dataUrl);
-    flashStatus('1080×1080 Instagram card downloaded & caption copied');
+    try {
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = cardFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setCardPreviewUrl(dataUrl);
+      flashStatus('1080×1080 Instagram card downloaded & caption copied');
+    } catch {
+      setCardPreviewUrl(dataUrl);
+      flashStatus('Card ready — save preview image manually');
+    }
   };
 
   return (

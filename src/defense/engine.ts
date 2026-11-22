@@ -1,5 +1,6 @@
 import { ensureAudio, SFX } from '../game/audio';
 import { DailyChallenge, PlayVariant, recordDailyRun, WeaponType } from '../game/challenge';
+import { recordRunHistory } from '../game/history';
 import { WpmPoint } from '../game/types';
 import {
   Cam,
@@ -140,6 +141,9 @@ export interface DefenseHudSnapshot {
   streak: number;
   bestStreak: number;
   bestScore: number;
+  inkCombo: number;
+  inkMult: number;
+  inkComboRatio: number;
   shield: number;
   cleanRun: number;
   inter: number;
@@ -147,7 +151,15 @@ export interface DefenseHudSnapshot {
   targetWord: string | null;
   targetPos: number;
   targetMarks: string[];
-  turrets: Array<{ level: number; cost: number; max: boolean; can: boolean }>;
+  turrets: Array<{
+    level: number;
+    cost: number;
+    max: boolean;
+    can: boolean;
+    cooldown: number;
+    cooldownRatio: number;
+    firing: boolean;
+  }>;
   padTags: Array<{ xPct: number; yPct: number; cost: number; max: boolean; can: boolean }>;
   wpmHistory: WpmPoint[];
 }
@@ -234,6 +246,7 @@ interface TurretEntity {
 }
 
 const BEST_KEY = 'typing-defense-best';
+const INK_COMBO_WINDOW = 6.5;
 
 export class TypingDefenseController {
   private boardEl: HTMLElement;
@@ -258,6 +271,8 @@ export class TypingDefenseController {
 
   private G = this.freshState();
   private target: EnemyEntity | null = null;
+  private comboHudAccum = 0;
+  private turretHudAccum = 0;
   private uid = 0;
   private rafId = 0;
   private lastTs = 0;
@@ -265,6 +280,7 @@ export class TypingDefenseController {
   private lastLabelW = 0;
   private fontU = 13;
   private wpmSampleT = 1.5;
+  private tutorialMode = false;
 
   constructor(
     boardEl: HTMLElement,
@@ -513,6 +529,8 @@ export class TypingDefenseController {
       score: 0,
       streak: 0,
       bestStreak: 0,
+      killCombo: 0,
+      killComboT: 0,
       cleanRun: 0,
       shield: 0,
       correct: 0,
@@ -535,6 +553,10 @@ export class TypingDefenseController {
 
   private mult(): number {
     return Math.min(5, 1 + Math.floor(this.G.streak / 15));
+  }
+
+  private getInkMult(): number {
+    return Math.min(4, 1 + Math.floor(this.G.killCombo / 2));
   }
 
   private currentWpm(): number {
@@ -570,6 +592,9 @@ export class TypingDefenseController {
       streak: this.G.streak,
       bestStreak: this.G.bestStreak,
       bestScore: this.getBestScore(),
+      inkCombo: this.G.killCombo,
+      inkMult: this.getInkMult(),
+      inkComboRatio: this.G.killCombo > 0 ? clamp(this.G.killComboT / INK_COMBO_WINDOW, 0, 1) : 0,
       shield: this.G.shield,
       cleanRun: this.G.cleanRun,
       inter: this.G.inter,
@@ -581,7 +606,18 @@ export class TypingDefenseController {
         const max = t.level >= 3;
         const cost = TURRET_COST[t.level] ?? 70;
         const can = !max && this.G.ink >= cost && this.G.running;
-        return { level: t.level, cost, max, can };
+        const cooldown = t.level > 0 ? Math.max(0, Math.round(t.cd * 10) / 10) : 0;
+        const rate = t.level > 0 ? TURRET_RATE[t.level - 1] : 1;
+        const cooldownRatio = t.level > 0 ? clamp(t.cd / rate, 0, 1) : 0;
+        return {
+          level: t.level,
+          cost,
+          max,
+          can,
+          cooldown,
+          cooldownRatio,
+          firing: t.level > 0 && t.cd <= 0.05 && this.G.running,
+        };
       }),
       padTags: this.turrets.map((t, i) => {
         const max = t.level >= 3;
@@ -647,6 +683,7 @@ export class TypingDefenseController {
     variant: PlayVariant = 'standard',
     challenge: DailyChallenge | null = null
   ): void {
+    this.tutorialMode = false;
     this.clearField();
     this.G = this.freshState(variant, challenge);
     this.target = null;
@@ -666,6 +703,74 @@ export class TypingDefenseController {
     );
     ensureAudio();
     this.emitHud();
+  }
+
+  public startTutorial(stage: 0 | 1): void {
+    this.tutorialMode = true;
+    this.clearField();
+    this.G = this.freshState('standard', null);
+    this.target = null;
+    this.wpmSampleT = 999;
+    this.G.running = true;
+    this.G.wave = 1;
+    this.G.inter = 0;
+    this.G.toSpawn = 0;
+    this.cb.onBanner(null);
+
+    if (stage === 0) {
+      this.G.ink = 20;
+      this.spawnTutorialWalker(1, 'keep', 268);
+      this.cb.onFeed('type <b>keep</b> to fire bolts from the Keep and collect Ink');
+    } else {
+      this.G.ink = 50;
+      this.spawnTutorialWalker(0, 'guard', 284);
+      this.spawnTutorialWalker(1, 'tower', 310);
+      this.cb.onFeed('press <b>1</b> to place a turret in Lane 1, then press <b>2</b> for Lane 2');
+    }
+    this.emitHud();
+  }
+
+  private spawnTutorialWalker(lane: number, word: string, x: number): void {
+    const type: WalkerKind = 'walker';
+    const T = TYPES[type];
+    const g = mk('g', {}, this.gLive);
+    const ringEl = mk('path', { class: 'nf dash', visibility: 'hidden' }, g);
+    const parts = TEMPLATES[type].map(p => ({ ...p, s: solid(g) }));
+    const visor = mk('path', { class: 'nf' }, g);
+    const bubble = document.createElement('div');
+    bubble.className = 'td-bubble';
+    this.labelsEl.appendChild(bubble);
+
+    const drop = tween(40);
+    tset(drop, 0, performance.now(), 0, this.isReducedMotion());
+
+    const e: EnemyEntity = {
+      id: ++this.uid,
+      type,
+      T,
+      lane,
+      x,
+      y: LANES[lane],
+      word,
+      marks: Array(word.length).fill(''),
+      pos: 0,
+      end: word.length,
+      clean: true,
+      speed: 4,
+      phase: 0,
+      drop,
+      atk: 2,
+      dying: false,
+      dieAt: 0,
+      g,
+      ringEl,
+      parts,
+      visor,
+      bubble,
+      dirty: true,
+      flash: 0,
+    };
+    this.G.enemies.push(e);
   }
 
   public pause(force?: boolean): void {
@@ -723,6 +828,10 @@ export class TypingDefenseController {
   public handleChar(chRaw: string): void {
     if (!this.G.running || this.G.paused) return;
     const ch = chRaw.toLowerCase();
+    if (/^[123]$/.test(ch)) {
+      this.build(Number(ch) - 1);
+      return;
+    }
     if (!/^[a-z ]$/.test(ch)) return;
 
     let t = this.target && !this.target.dying ? this.target : null;
@@ -797,6 +906,8 @@ export class TypingDefenseController {
       t.clean = false;
       this.G.wrong++;
       this.G.streak = 0;
+      this.G.killCombo = 0;
+      this.G.killComboT = 0;
       this.G.weaponCharge = 0;
       this.G.cleanRun = 0;
       if (this.G.shield > 0) {
@@ -855,8 +966,22 @@ export class TypingDefenseController {
     this.shards(e, e.type === 'brute' ? 12 : 8, true);
     this.ripple(e.x, e.y);
     this.G.kills++;
-    this.G.ink += e.T.bounty;
-    this.floatText([e.x, e.y, this.topOf(e)], `+${e.T.bounty} ink`);
+    if (e.clean) {
+      this.G.killCombo += 1;
+      this.G.killComboT = INK_COMBO_WINDOW;
+    }
+    const inkMult = this.getInkMult();
+    const earnedInk = Math.round(e.T.bounty * inkMult);
+    this.G.ink += earnedInk;
+    this.floatText(
+      [e.x, e.y, this.topOf(e)],
+      inkMult > 1 ? `+${earnedInk} ink (${inkMult}×)` : `+${earnedInk} ink`
+    );
+    if (e.clean && inkMult > 1) {
+      this.cb.onFeed(
+        `<b>${inkMult}× ink combo</b> · +${earnedInk} ink (${this.G.killCombo} consecutive)`
+      );
+    }
     if (this.target === e) this.retarget(null);
     e.g.remove();
     window.setTimeout(() => e.bubble.remove(), 260);
@@ -873,12 +998,12 @@ export class TypingDefenseController {
       this.emitHud();
       return;
     }
-    this.G.hp = Math.max(0, this.G.hp - n);
+    this.G.hp = Math.max(this.tutorialMode ? 20 : 0, this.G.hp - n);
     SFX.hurt();
     this.floatText([KX + 4, KY, 100], `−${n}`, true);
     this.cb.onShake();
     this.emitHud();
-    if (this.G.hp <= 0) this.gameOver();
+    if (!this.tutorialMode && this.G.hp <= 0) this.gameOver();
   }
 
   private gameOver(): void {
@@ -887,11 +1012,21 @@ export class TypingDefenseController {
     const best = Math.max(this.getBestScore(), this.G.score);
     this.setBestScore(best);
 
+    const tot = this.G.correct + this.G.wrong;
+    const acc = tot ? Math.round((this.G.correct / tot) * 100) : 100;
+    const finalWpm = this.currentWpm();
+
+    recordRunHistory('defense', {
+      score: this.G.score,
+      accuracy: acc,
+      wpm: finalWpm,
+      wave: this.G.wave,
+    });
+
     if (this.G.variant === 'daily' && this.G.challenge) {
       recordDailyRun('defense', this.G.challenge.dateKey, this.G.score, this.G.wave, this.G.kills);
     }
 
-    const finalWpm = this.currentWpm();
     const lastPt = this.G.wpmHistory[this.G.wpmHistory.length - 1];
     if (!lastPt || this.G.playT - lastPt.t > 0.25) {
       this.G.wpmHistory.push({ t: Math.round(this.G.playT * 10) / 10, wpm: finalWpm });
@@ -1098,7 +1233,7 @@ export class TypingDefenseController {
     );
     const e = this.nearest(cands);
     if (e) t.aim.t = (Math.atan2(e.y - t.y, e.x - t.x) * 180) / Math.PI;
-    t.cd -= dt;
+    t.cd = Math.max(0, t.cd - dt);
     if (t.cd > 0 || !e) return;
     t.cd = TURRET_RATE[t.level - 1];
     t.recoil.x = 1;
@@ -1263,43 +1398,58 @@ export class TypingDefenseController {
 
     if (this.G.running && !this.G.paused) {
       this.G.t += dt;
-      if (this.G.inter > 0) {
-        const before = Math.ceil(this.G.inter);
-        this.G.inter -= dt;
-        if (Math.ceil(this.G.inter) !== before && this.G.inter > 0) {
-          if (this.G.wave) {
-            this.cb.onBanner(
-              `Wave ${this.G.wave} held`,
-              `build with 1 · 2 · 3 — next wave in ${Math.ceil(this.G.inter)}`
-            );
-          } else {
-            this.cb.onBanner(
-              `Wave 1 in ${Math.ceil(this.G.inter)}`,
-              'you have 25 ink — press 1, 2 or 3 to build a turret'
-            );
-          }
-        }
-        if (this.G.inter <= 0) this.startWave(this.G.wave + 1);
-      } else {
-        this.G.playT += dt;
-        this.wpmSampleT -= dt;
-        if (this.wpmSampleT <= 0) {
-          this.wpmSampleT = 1.5;
-          this.G.wpmHistory.push({
-            t: Math.round(this.G.playT * 10) / 10,
-            wpm: this.currentWpm(),
-          });
+      if (this.G.killCombo > 0) {
+        this.G.killComboT -= dt;
+        this.comboHudAccum += dt;
+        if (this.G.killComboT <= 0) {
+          this.G.killCombo = 0;
+          this.G.killComboT = 0;
+          this.comboHudAccum = 0;
+          this.emitHud();
+        } else if (this.comboHudAccum >= 0.22) {
+          this.comboHudAccum = 0;
           this.emitHud();
         }
-
-        if (this.G.toSpawn > 0) {
-          this.G.spawnT -= dt;
-          if (this.G.spawnT <= 0 && this.spawn()) {
-            this.G.toSpawn--;
-            this.G.spawnT = this.G.interval * randDefense(0.75, 1.25);
+      }
+      if (!this.tutorialMode) {
+        if (this.G.inter > 0) {
+          const before = Math.ceil(this.G.inter);
+          this.G.inter -= dt;
+          if (Math.ceil(this.G.inter) !== before && this.G.inter > 0) {
+            if (this.G.wave) {
+              this.cb.onBanner(
+                `Wave ${this.G.wave} held`,
+                `build with 1 · 2 · 3 — next wave in ${Math.ceil(this.G.inter)}`
+              );
+            } else {
+              this.cb.onBanner(
+                `Wave 1 in ${Math.ceil(this.G.inter)}`,
+                'you have 25 ink — press 1, 2 or 3 to build a turret'
+              );
+            }
           }
-        } else if (!this.G.enemies.length) {
-          this.waveClear();
+          if (this.G.inter <= 0) this.startWave(this.G.wave + 1);
+        } else {
+          this.G.playT += dt;
+          this.wpmSampleT -= dt;
+          if (this.wpmSampleT <= 0) {
+            this.wpmSampleT = 1.5;
+            this.G.wpmHistory.push({
+              t: Math.round(this.G.playT * 10) / 10,
+              wpm: this.currentWpm(),
+            });
+            this.emitHud();
+          }
+
+          if (this.G.toSpawn > 0) {
+            this.G.spawnT -= dt;
+            if (this.G.spawnT <= 0 && this.spawn()) {
+              this.G.toSpawn--;
+              this.G.spawnT = this.G.interval * randDefense(0.75, 1.25);
+            }
+          } else if (!this.G.enemies.length) {
+            this.waveClear();
+          }
         }
       }
 
@@ -1314,14 +1464,15 @@ export class TypingDefenseController {
           }
           if (!tdone(e.drop, now, reduced)) return;
           const ahead = l[i - 1];
-          const stopAt = ahead ? Math.max(STOP_X, ahead.x + ahead.T.hw + e.T.hw + 8) : STOP_X;
+          const minX = this.tutorialMode ? 225 : STOP_X;
+          const stopAt = ahead ? Math.max(minX, ahead.x + ahead.T.hw + e.T.hw + 8) : minX;
           if (e.x > stopAt) {
             e.x = Math.max(stopAt, e.x - e.speed * dt);
             e.phase += dt * e.speed * 0.32;
           } else if (Math.sin(e.phase) > 0.05 || Math.sin(e.phase) < -0.05) {
             e.phase += dt * 6;
           }
-          if (!e.dying && e.x <= STOP_X + 0.5) {
+          if (!this.tutorialMode && !e.dying && e.x <= STOP_X + 0.5) {
             e.atk -= dt;
             if (e.atk <= 0) {
               e.atk = e.T.atk;
@@ -1333,7 +1484,24 @@ export class TypingDefenseController {
           }
         });
       }
+      const prevCooldowns = this.turrets.map(t => t.level > 0 && t.cd > 0);
       this.turrets.forEach(t => this.turretTick(t, dt));
+      const anyCooling = this.turrets.some(t => t.level > 0 && t.cd > 0);
+      const anyFinishedCooldown = this.turrets.some(
+        (t, idx) => prevCooldowns[idx] && t.level > 0 && t.cd <= 0
+      );
+      if (anyCooling) {
+        this.turretHudAccum += dt;
+        if (this.turretHudAccum >= 0.16) {
+          this.turretHudAccum = 0;
+          this.emitHud();
+        }
+      } else {
+        this.turretHudAccum = 0;
+        if (anyFinishedCooldown) {
+          this.emitHud();
+        }
+      }
     }
 
     for (const t of this.turrets) {

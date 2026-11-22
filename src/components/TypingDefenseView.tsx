@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { DefenseHudSnapshot, TypingDefenseController } from '../defense/engine';
 import { DailyChallenge, PlayVariant } from '../game/challenge';
+import { PlayerHistory } from '../game/history';
 import { buildDefenseShareText, renderDefenseShareCardPng } from '../game/shareCard';
 import { MenuKeepFigure } from './MenuKeepFigure';
 import { SocialShareBar } from './SocialShareBar';
@@ -26,6 +27,7 @@ interface TypingDefenseViewProps {
   fastRestart: boolean;
   variant: PlayVariant;
   dailyChallenge: DailyChallenge;
+  playerHistory: PlayerHistory;
   onChangeVariant: (v: PlayVariant) => void;
   onRunEnd: () => void;
   onCloseHelp: () => void;
@@ -51,6 +53,9 @@ const INITIAL_HUD: DefenseHudSnapshot = {
   streak: 0,
   bestStreak: 0,
   bestScore: 0,
+  inkCombo: 0,
+  inkMult: 1,
+  inkComboRatio: 0,
   shield: 0,
   cleanRun: 0,
   inter: 0,
@@ -59,9 +64,9 @@ const INITIAL_HUD: DefenseHudSnapshot = {
   targetPos: 0,
   targetMarks: [],
   turrets: [
-    { level: 0, cost: 25, max: false, can: false },
-    { level: 0, cost: 25, max: false, can: false },
-    { level: 0, cost: 25, max: false, can: false },
+    { level: 0, cost: 25, max: false, can: false, cooldown: 0, cooldownRatio: 0, firing: false },
+    { level: 0, cost: 25, max: false, can: false, cooldown: 0, cooldownRatio: 0, firing: false },
+    { level: 0, cost: 25, max: false, can: false, cooldown: 0, cooldownRatio: 0, firing: false },
   ],
   padTags: [],
   wpmHistory: [{ t: 0, wpm: 0 }],
@@ -93,6 +98,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
       fastRestart,
       variant,
       dailyChallenge,
+      playerHistory,
       onChangeVariant,
       onRunEnd,
       onCloseHelp,
@@ -113,7 +119,9 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
     const [banner, setBanner] = useState<{ title: string; sub?: string } | null>(null);
     const [shaking, setShaking] = useState<boolean>(false);
     const [inkBump, setInkBump] = useState<boolean>(false);
+    const [comboBump, setComboBump] = useState<boolean>(false);
     const prevInkRef = useRef<number>(25);
+    const prevComboRef = useRef<number>(0);
     const prevOverRef = useRef<boolean>(false);
     const helpPausedRef = useRef<boolean>(false);
     const prevHelpRef = useRef<boolean>(false);
@@ -148,6 +156,14 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
             prevInkRef.current = snap.ink;
             setInkBump(false);
             window.requestAnimationFrame(() => setInkBump(true));
+          }
+          if (snap.inkCombo !== prevComboRef.current) {
+            const grew = snap.inkCombo > prevComboRef.current;
+            prevComboRef.current = snap.inkCombo;
+            if (grew) {
+              setComboBump(false);
+              window.requestAnimationFrame(() => setComboBump(true));
+            }
           }
           onStateSyncRef.current({
             running: snap.running,
@@ -373,6 +389,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
               onAnimationEnd={() => setInkBump(false)}
             >
               {hud.ink}
+              {hud.inkMult > 1 ? <small> · ×{hud.inkMult}</small> : null}
             </b>
           </div>
 
@@ -388,7 +405,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
 
           <div className="hud-cell">
             <span className="cap">Accuracy</span>
-            <b className="hud-num mono">
+            <b className="mono hud-num">
               {hud.acc}
               <small>%</small>
             </b>
@@ -401,11 +418,91 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
             </b>
           </div>
 
-          <div className="hud-cell td-hide-xs">
-            <span className="cap">Combo</span>
-            <b className="hud-num mono">
-              ×{hud.mult} <small>· {hud.streak}</small>
+          <div
+            className={`hud-cell td-combo-cell${hud.inkMult > 1 ? ' td-combo-active' : ''}`}
+            role="status"
+            aria-label={`Ink combo multiplier ${hud.inkMult}x, ${hud.inkCombo} consecutive kills`}
+          >
+            <span className="cap">Ink Combo</span>
+            <b
+              className={`hud-num mono${hud.inkMult > 1 ? ' td-combo-hot' : ''}${
+                comboBump ? ' td-bump' : ''
+              }`}
+              onAnimationEnd={() => setComboBump(false)}
+            >
+              ×{hud.inkMult}{' '}
+              <small>
+                {hud.inkCombo > 0 ? `· ${hud.inkCombo} chain` : `· pts ×${hud.mult}`}
+              </small>
             </b>
+            <div className="td-combo-track" aria-hidden="true">
+              <div
+                className={`td-combo-fill${hud.inkMult > 1 ? ' hot' : ''}`}
+                style={{ width: `${Math.round(hud.inkComboRatio * 100)}%` }}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Persistent On-Screen Turret Keyboard Guide (Keys 1–3) */}
+        <section className="td-keybar" aria-label="Turret placement and cooldown keyboard guide">
+          <span className="cap td-keybar-label">Turret Keys</span>
+          <div className="td-keybar-keys" role="group" aria-label="Turret shortcut keys 1 to 3">
+            {hud.turrets.map((t, i) => {
+              const isCooling = t.level > 0 && t.cooldown > 0;
+              const isActive = t.level > 0 && !isCooling;
+              const isReadyToBuild = t.level === 0 && t.can;
+              const stateCls = isCooling
+                ? 'cooling'
+                : isActive
+                  ? 'active'
+                  : isReadyToBuild
+                    ? 'ready'
+                    : 'idle';
+              const statusText = isCooling
+                ? `COOL ${t.cooldown.toFixed(1)}s`
+                : isActive
+                  ? t.max
+                    ? 'ACTIVE MAX'
+                    : t.can
+                      ? `UPG ${t.cost}`
+                      : 'ACTIVE'
+                  : t.can
+                    ? `BUILD ${t.cost}`
+                    : `NEED ${t.cost}`;
+
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`td-keycap mono ${stateCls}`}
+                  disabled={!hud.running || t.max}
+                  title={`Press ${i + 1} for Lane ${i + 1} turret (${statusText})`}
+                  aria-label={`Key ${i + 1}, Lane ${i + 1}, ${
+                    t.level > 0 ? `Level ${t.level}` : 'Unbuilt'
+                  }, ${statusText}`}
+                  onClick={e => {
+                    controllerRef.current?.build(i);
+                    e.currentTarget.blur();
+                  }}
+                >
+                  <kbd>{i + 1}</kbd>
+                  <span className="td-keycap-lane">
+                    L{i + 1}
+                    {t.level > 0 ? `·Lv${t.level}` : ''}
+                  </span>
+                  <span className="td-keycap-state">{statusText}</span>
+                  {isCooling && (
+                    <span className="td-keycap-cd" aria-hidden="true">
+                      <span
+                        className="td-keycap-cd-fill"
+                        style={{ transform: `scaleX(${t.cooldownRatio})` }}
+                      />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -557,30 +654,30 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
                   <h2>GAME OVER</h2>
                   <div className="final-stats">
                     <div>
-                      <span className="cap">Score</span>
+                      <span className="cap">Session Score</span>
                       <b>{hud.score.toLocaleString()}</b>
                     </div>
                     <div>
-                      <span className="cap">Walkers down</span>
-                      <b>{hud.kills}</b>
-                    </div>
-                    <div>
-                      <span className="cap">Wave reached</span>
-                      <b>{hud.wave}</b>
-                    </div>
-                    <div>
-                      <span className="cap">Accuracy</span>
+                      <span className="cap">Session Accuracy</span>
                       <b>{hud.acc}%</b>
+                    </div>
+                    <div>
+                      <span className="cap">Lifetime Best Acc</span>
+                      <b>{Math.max(playerHistory.lifetimeBestAccuracy, hud.acc)}%</b>
+                    </div>
+                    <div>
+                      <span className="cap">Wave &amp; Walkers</span>
+                      <b>
+                        W{hud.wave} · {hud.kills} down
+                      </b>
                     </div>
                     <div>
                       <span className="cap">Speed</span>
                       <b>{hud.wpm} wpm</b>
                     </div>
                     <div>
-                      <span className="cap">Best streak</span>
-                      <b>
-                        ×{hud.bestStreak} · best {hud.bestScore.toLocaleString()}
-                      </b>
+                      <span className="cap">Best Score</span>
+                      <b>{Math.max(hud.bestScore, playerHistory.defense.bestScore).toLocaleString()}</b>
                     </div>
                   </div>
 

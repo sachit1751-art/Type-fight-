@@ -24,7 +24,17 @@ import {
   PlayVariant,
   recordDailyRun,
 } from './game/challenge';
-import { getPreferences, subscribePreferences } from './game/preferences';
+import {
+  getPlayerHistory,
+  PlayerHistory,
+  recordRunHistory,
+  subscribePlayerHistory,
+} from './game/history';
+import {
+  getPreferences,
+  markTutorialCompleted,
+  subscribePreferences,
+} from './game/preferences';
 import {
   createPillars,
   drawGame,
@@ -56,6 +66,7 @@ export default function App() {
   dailyChallengeRef.current = dailyChallenge;
 
   const [dailyProgress, setDailyProgress] = useState<DailyProgress>(() => getDailyProgress());
+  const [playerHistory, setPlayerHistory] = useState<PlayerHistory>(() => getPlayerHistory());
 
   const [arcadeVariant, setArcadeVariant] = useState<PlayVariant>('standard');
   const arcadeVariantRef = useRef(arcadeVariant);
@@ -69,6 +80,10 @@ export default function App() {
   const [activeView, setActiveView] = useState<WorkspaceView>('home');
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
+  const [viewTransition, setViewTransition] = useState<{
+    key: number;
+    dir: 'init' | 'to-game' | 'to-home' | 'switch';
+  }>({ key: 0, dir: 'init' });
 
   const [defenseStatus, setDefenseStatus] = useState<{
     running: boolean;
@@ -102,6 +117,7 @@ export default function App() {
   const audioPausedGameRef = useRef<boolean>(false);
 
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(false);
+  const [tutorialGame, setTutorialGame] = useState<'arcade' | 'defense'>('arcade');
   const tutorialOpenRef = useRef(tutorialOpen);
   tutorialOpenRef.current = tutorialOpen;
   const tutorialPausedGameRef = useRef<boolean>(false);
@@ -123,6 +139,7 @@ export default function App() {
   const [streakPop, setStreakPop] = useState<boolean>(false);
   const streakPopTimerRef = useRef<number | null>(null);
   const [mobileLive, setMobileLive] = useState<boolean>(false);
+  const [softKeyboardOpen, setSoftKeyboardOpen] = useState<boolean>(false);
 
   useEffect(() => {
     document.body.classList.toggle('dark-plate', darkMode);
@@ -145,6 +162,42 @@ export default function App() {
     return subscribePreferences(prefs => {
       setFastRestartState(prefs.fastRestart);
     });
+  }, []);
+
+  /* Subscribe to persistent lifetime accuracy & last score records */
+  useEffect(() => {
+    return subscribePlayerHistory(setPlayerHistory);
+  }, []);
+
+  /* Detect mobile soft keyboard via visualViewport so dock never overlaps the typing console */
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const syncViewport = () => {
+      const isNarrow = window.innerWidth <= 720;
+      const keyboardVisible = isNarrow && vv.height < window.innerHeight * 0.74;
+      setSoftKeyboardOpen(keyboardVisible);
+    };
+    syncViewport();
+    vv.addEventListener('resize', syncViewport);
+    window.addEventListener('resize', syncViewport);
+    return () => {
+      vv.removeEventListener('resize', syncViewport);
+      window.removeEventListener('resize', syncViewport);
+    };
+  }, []);
+
+  /* Unlock Web Audio on first user interaction across all browsers */
+  useEffect(() => {
+    const unlock = () => {
+      ensureAudio();
+    };
+    window.addEventListener('pointerdown', unlock, { passive: true, once: true });
+    window.addEventListener('keydown', unlock, { passive: true, once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
   }, []);
 
   /* Refresh daily challenge automatically when crossing midnight */
@@ -219,6 +272,13 @@ export default function App() {
     },
     onGameOver: () => {
       const G = gameRef.current;
+      const snap = getHudSnapshot(G);
+      recordRunHistory('arcade', {
+        score: snap.score,
+        accuracy: snap.acc,
+        wpm: snap.wpm,
+        wave: snap.wave,
+      });
       if (G.variant === 'daily' && G.challenge) {
         const updated = recordDailyRun('arcade', G.challenge.dateKey, G.score, G.wave, G.kills);
         setDailyProgress(updated);
@@ -353,19 +413,27 @@ export default function App() {
     });
   }, [syncHudNow]);
 
-  const openTutorial = useCallback(() => {
-    if (tutorialOpenRef.current) return;
-    const G = gameRef.current;
-    tutorialPausedGameRef.current = activeViewRef.current === 'arcade' && G.mode === 'playing';
-    if (tutorialPausedGameRef.current) {
-      G.mode = 'paused';
-      syncHudNow();
-    }
-    setTutorialOpen(true);
-  }, [syncHudNow]);
+  const openTutorial = useCallback(
+    (forGame?: 'arcade' | 'defense') => {
+      if (tutorialOpenRef.current) return;
+      ensureAudio();
+      const target: 'arcade' | 'defense' =
+        forGame ?? (activeViewRef.current === 'defense' ? 'defense' : 'arcade');
+      setTutorialGame(target);
+      const G = gameRef.current;
+      tutorialPausedGameRef.current = activeViewRef.current === 'arcade' && G.mode === 'playing';
+      if (tutorialPausedGameRef.current) {
+        G.mode = 'paused';
+        syncHudNow();
+      }
+      setTutorialOpen(true);
+    },
+    [syncHudNow]
+  );
 
   const closeTutorial = useCallback(() => {
     if (!tutorialOpenRef.current) return;
+    markTutorialCompleted(tutorialGame);
     setTutorialOpen(false);
     const G = gameRef.current;
     if (tutorialPausedGameRef.current && G.mode === 'paused' && activeViewRef.current === 'arcade') {
@@ -373,10 +441,11 @@ export default function App() {
       syncHudNow();
     }
     tutorialPausedGameRef.current = false;
-  }, [syncHudNow]);
+  }, [syncHudNow, tutorialGame]);
 
   const switchView = useCallback(
     (next: WorkspaceView) => {
+      ensureAudio();
       if (next !== 'arcade' && gameRef.current.mode === 'playing') {
         gameRef.current.mode = 'paused';
         syncHudNow();
@@ -389,9 +458,39 @@ export default function App() {
         setAudioOpen(false);
         audioPausedGameRef.current = false;
       }
+      const prev = activeViewRef.current;
+      if (next !== prev) {
+        const dir = next === 'home' ? 'to-home' : prev === 'home' ? 'to-game' : 'switch';
+        setViewTransition(vt => ({ key: vt.key + 1, dir }));
+      }
       setActiveView(next);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      if (next !== 'home' && !getPreferences().tutorialsCompleted[next]) {
+        setTutorialGame(next);
+        tutorialPausedGameRef.current = false;
+        setTutorialOpen(true);
+      }
     },
     [syncHudNow]
+  );
+
+  const launchGameFromHome = useCallback(
+    (game: 'arcade' | 'defense', daily?: boolean) => {
+      ensureAudio();
+      SFX.word();
+      if (game === 'arcade') {
+        if (typeof daily === 'boolean') {
+          selectArcadeVariant(daily ? 'daily' : 'standard');
+        }
+        switchView('arcade');
+      } else {
+        if (typeof daily === 'boolean') {
+          setDefenseVariant(daily ? 'daily' : 'standard');
+        }
+        switchView('defense');
+      }
+    },
+    [selectArcadeVariant, switchView]
   );
 
   const processChar = useCallback(
@@ -589,6 +688,9 @@ export default function App() {
     setMobileLive(true);
     window.requestAnimationFrame(() => {
       mobileInputRef.current?.focus({ preventScroll: true });
+      if (window.innerWidth <= 720) {
+        document.getElementById('consoleBar')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
     });
     e.currentTarget.blur();
   };
@@ -601,103 +703,106 @@ export default function App() {
     (activeView === 'defense' && defenseStatus.paused);
   const canRestart = activeView === 'arcade' || activeView === 'defense';
 
+  const showInGameChrome = activeView !== 'home' && !tutorialOpen;
+
   return (
     <>
-      <TopBar
-        activeView={activeView}
-        canPause={canPause}
-        isPaused={isPaused}
-        canRestart={canRestart}
-        soundOn={soundOn}
-        darkMode={darkMode}
-        helpOpen={helpOpen}
-        audioOpen={audioOpen}
-        helpBtnRef={helpBtnRef}
-        audioBtnRef={audioBtnRef}
-        onGoHome={() => switchView('home')}
-        onOpenHelp={() => {
-          openHelp();
-          helpBtnRef.current?.blur();
-        }}
-        onOpenAudio={() => {
-          openAudio();
-          audioBtnRef.current?.blur();
-        }}
-        onOpenTutorial={openTutorial}
-        onToggleSound={handleToggleSound}
-        onToggleTheme={handleToggleTheme}
-        onTogglePause={handleTogglePause}
-        onRestart={handleRestart}
-      />
+      {viewTransition.key > 0 && (
+        <div
+          key={viewTransition.key}
+          className={`view-wipe-line view-wipe--${viewTransition.dir}`}
+          aria-hidden="true"
+        />
+      )}
 
-      <main className="shell">
-        {/* Workspace Switcher: Home, Type Arcade & Typing Defense */}
-        <div className="workspace-bar">
-          <div className="mode-switch" role="tablist" aria-label="Game workspace">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeView === 'home'}
-              className={`mode-tab mono${activeView === 'home' ? ' active' : ''}`}
-              onClick={e => {
-                switchView('home');
-                e.currentTarget.blur();
-              }}
-            >
-              ⌂ HOME
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeView === 'arcade'}
-              className={`mode-tab mono${activeView === 'arcade' ? ' active' : ''}`}
-              onClick={e => {
-                switchView('arcade');
-                e.currentTarget.blur();
-              }}
-            >
-              ▸ TYPE ARCADE
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeView === 'defense'}
-              className={`mode-tab mono${activeView === 'defense' ? ' active' : ''}`}
-              onClick={e => {
-                switchView('defense');
-                e.currentTarget.blur();
-              }}
-            >
-              ⛨ TYPING DEFENSE
-            </button>
-          </div>
+      {showInGameChrome && (
+        <TopBar
+          activeView={activeView}
+          canPause={canPause}
+          isPaused={isPaused}
+          canRestart={canRestart}
+          soundOn={soundOn}
+          darkMode={darkMode}
+          helpOpen={helpOpen}
+          audioOpen={audioOpen}
+          compactKeyboard={softKeyboardOpen}
+          helpBtnRef={helpBtnRef}
+          audioBtnRef={audioBtnRef}
+          onGoHome={() => switchView('home')}
+          onOpenHelp={() => {
+            openHelp();
+            helpBtnRef.current?.blur();
+          }}
+          onOpenAudio={() => {
+            openAudio();
+            audioBtnRef.current?.blur();
+          }}
+          onOpenTutorial={() => openTutorial()}
+          onToggleSound={handleToggleSound}
+          onToggleTheme={handleToggleTheme}
+          onTogglePause={handleTogglePause}
+          onRestart={handleRestart}
+        />
+      )}
 
-          <span className="cap dim workspace-note">
-            {activeView === 'home'
-              ? 'desktop & mobile arcade · choose a typing game'
-              : activeView === 'arcade'
+      <main className={`shell${activeView === 'home' ? ' shell-home' : ''}`}>
+        {showInGameChrome && (
+          <div className="workspace-bar">
+            <div className="mode-switch" role="tablist" aria-label="Game workspace">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                className="mode-tab mono"
+                onClick={e => {
+                  switchView('home');
+                  e.currentTarget.blur();
+                }}
+              >
+                ⌂ HOME
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === 'arcade'}
+                className={`mode-tab mono${activeView === 'arcade' ? ' active' : ''}`}
+                onClick={e => {
+                  switchView('arcade');
+                  e.currentTarget.blur();
+                }}
+              >
+                ▸ TYPE ARCADE
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === 'defense'}
+                className={`mode-tab mono${activeView === 'defense' ? ' active' : ''}`}
+                onClick={e => {
+                  switchView('defense');
+                  e.currentTarget.blur();
+                }}
+              >
+                ⛨ TYPING DEFENCE
+              </button>
+            </div>
+
+            <span className="cap dim workspace-note">
+              {activeView === 'arcade'
                 ? 'stick-figure firing line · D3 WPM trend on game over'
                 : 'isometric keep & 3 lanes · keys 1–3 build turrets'}
-          </span>
-        </div>
+            </span>
+          </div>
+        )}
 
-        {activeView === 'home' ? (
+        <div key={activeView} className={`view-stage view-stage--${viewTransition.dir}`}>
+          {activeView === 'home' ? (
           <HomeLanding
             dailyChallenge={dailyChallenge}
             dailyProgress={dailyProgress}
-            onGoArcade={daily => {
-              if (typeof daily === 'boolean') {
-                selectArcadeVariant(daily ? 'daily' : 'standard');
-              }
-              switchView('arcade');
-            }}
-            onGoDefense={daily => {
-              if (typeof daily === 'boolean') {
-                setDefenseVariant(daily ? 'daily' : 'standard');
-              }
-              switchView('defense');
-            }}
-            onOpenTutorial={openTutorial}
+            playerHistory={playerHistory}
+            onStartArcade={daily => launchGameFromHome('arcade', daily)}
+            onStartDefense={daily => launchGameFromHome('defense', daily)}
           />
         ) : activeView === 'arcade' ? (
           <>
@@ -848,28 +953,32 @@ export default function App() {
                     <h2>GAME OVER</h2>
                     <div className="final-stats" id="finalStats">
                       <div>
-                        <span className="cap">Score</span>
+                        <span className="cap">Session Score</span>
                         <b>{hud.score.toLocaleString()}</b>
                       </div>
                       <div>
-                        <span className="cap">Enemies down</span>
-                        <b>{hud.kills}</b>
-                      </div>
-                      <div>
-                        <span className="cap">Wave reached</span>
-                        <b>{hud.wave}</b>
-                      </div>
-                      <div>
-                        <span className="cap">Accuracy</span>
+                        <span className="cap">Session Accuracy</span>
                         <b>{hud.acc}%</b>
+                      </div>
+                      <div>
+                        <span className="cap">Lifetime Best Acc</span>
+                        <b>{Math.max(playerHistory.lifetimeBestAccuracy, hud.acc)}%</b>
+                      </div>
+                      <div>
+                        <span className="cap">Wave &amp; Kills</span>
+                        <b>
+                          W{hud.wave} · {hud.kills} down
+                        </b>
                       </div>
                       <div>
                         <span className="cap">Speed</span>
                         <b>{hud.wpm} wpm</b>
                       </div>
                       <div>
-                        <span className="cap">Best streak</span>
-                        <b>×{hud.bestStreak}</b>
+                        <span className="cap">Best Score</span>
+                        <b>
+                          {Math.max(hud.score, playerHistory.arcade.bestScore).toLocaleString()}
+                        </b>
                       </div>
                     </div>
 
@@ -994,12 +1103,14 @@ export default function App() {
             fastRestart={fastRestart}
             variant={defenseVariant}
             dailyChallenge={dailyChallenge}
+            playerHistory={playerHistory}
             onChangeVariant={setDefenseVariant}
             onRunEnd={() => setDailyProgress(getDailyProgress())}
             onCloseHelp={closeHelp}
             onStateSync={setDefenseStatus}
           />
         )}
+        </div>
       </main>
 
       <HelpDrawer
@@ -1020,45 +1131,56 @@ export default function App() {
 
       <OnboardingModal
         open={tutorialOpen}
+        targetGame={tutorialGame}
+        darkMode={darkMode}
         onClose={closeTutorial}
-        onCompleteGoToDefense={() => switchView('defense')}
+        onEnterGame={g => {
+          markTutorialCompleted(g);
+          setTutorialOpen(false);
+          tutorialPausedGameRef.current = false;
+          setViewTransition(vt => ({ key: vt.key + 1, dir: 'to-game' }));
+          setActiveView(g);
+          window.scrollTo({ top: 0, behavior: 'auto' });
+        }}
       />
 
-      {/* Mobile-native bottom thumb dock */}
-      <nav className="mobile-dock" aria-label="Mobile quick navigation">
-        <button
-          type="button"
-          className={`dock-btn mono${activeView === 'home' ? ' active' : ''}`}
-          onClick={() => switchView('home')}
-        >
-          <span className="dock-ico" aria-hidden="true">⌂</span>
-          <span>Home</span>
-        </button>
-        <button
-          type="button"
-          className={`dock-btn mono${activeView === 'arcade' ? ' active' : ''}`}
-          onClick={() => switchView('arcade')}
-        >
-          <span className="dock-ico" aria-hidden="true">▸</span>
-          <span>Arcade</span>
-        </button>
-        <button
-          type="button"
-          className={`dock-btn mono${activeView === 'defense' ? ' active' : ''}`}
-          onClick={() => switchView('defense')}
-        >
-          <span className="dock-ico" aria-hidden="true">⛨</span>
-          <span>Defense</span>
-        </button>
-        <button
-          type="button"
-          className="dock-btn mono"
-          onClick={openTutorial}
-        >
-          <span className="dock-ico" aria-hidden="true">◈</span>
-          <span>Tour</span>
-        </button>
-      </nav>
+      {/* Mobile-native bottom thumb dock (in-game only, hidden while soft keyboard is open) */}
+      {showInGameChrome && !softKeyboardOpen && (
+        <nav className="mobile-dock" aria-label="Mobile quick navigation">
+          <button
+            type="button"
+            className="dock-btn mono"
+            onClick={() => switchView('home')}
+          >
+            <span className="dock-ico" aria-hidden="true">⌂</span>
+            <span>Home</span>
+          </button>
+          <button
+            type="button"
+            className={`dock-btn mono${activeView === 'arcade' ? ' active' : ''}`}
+            onClick={() => switchView('arcade')}
+          >
+            <span className="dock-ico" aria-hidden="true">▸</span>
+            <span>Arcade</span>
+          </button>
+          <button
+            type="button"
+            className={`dock-btn mono${activeView === 'defense' ? ' active' : ''}`}
+            onClick={() => switchView('defense')}
+          >
+            <span className="dock-ico" aria-hidden="true">⛨</span>
+            <span>Defence</span>
+          </button>
+          <button
+            type="button"
+            className="dock-btn mono"
+            onClick={() => openTutorial()}
+          >
+            <span className="dock-ico" aria-hidden="true">◈</span>
+            <span>Tour</span>
+          </button>
+        </nav>
+      )}
     </>
   );
 }

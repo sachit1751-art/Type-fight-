@@ -48,16 +48,21 @@ body {
   color: var(--hairline-hi);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
   transition: background 260ms var(--ease), color 260ms var(--ease);
 }
 
 a {
   color: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button {
   font-family: inherit;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 kbd {
@@ -87,6 +92,19 @@ kbd {
   position: sticky;
   top: 0;
   z-index: 30;
+}
+
+.topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-header-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
 }
 
 .brand {
@@ -122,9 +140,14 @@ kbd {
 }
 
 .top-actions {
+  display: block;
+}
+
+.top-actions-inner {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .tool {
@@ -160,9 +183,9 @@ kbd {
 
 /* ── shell / HUD ── */
 .shell {
-  max-width: 1080px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 18px 18px 34px;
+  padding: 20px clamp(18px, 3vw, 40px) 36px;
 }
 
 .hud {
@@ -945,9 +968,71 @@ body.dark-plate .help-body p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--hairline-lo);
+}
+
+.onboard-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.onboard-step-counter {
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--hairline-edge);
+  white-space: nowrap;
+}
+
+.onboard-progress-wrap {
+  padding: 10px 18px 11px;
+  border-bottom: 1px solid var(--hairline-lo);
+  display: grid;
+  gap: 7px;
+}
+
+.onboard-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--hairline-lo);
+  overflow: hidden;
+}
+
+.onboard-progress-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--hairline-hi);
+  transform-origin: left center;
+  transition: transform 240ms var(--ease), background 200ms var(--ease);
+}
+
+.onboard-progress-fill.complete {
+  background: var(--accent);
+}
+
+.onboard-progress-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--hairline-edge);
+}
+
+.onboard-progress-labels .cur {
+  color: var(--hairline-hi);
+  font-weight: 700;
+}
+
+.onboard-progress-labels .done {
+  color: var(--hairline-hi);
 }
 
 .onboard-steps {
@@ -1145,6 +1230,129 @@ body.dark-plate .help-body p {
 /* ── Typing Defense ── */
 .td-hud {
   grid-template-columns: 2fr repeat(6, 1fr);
+}
+
+.td-keybar {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border: 1px solid var(--hairline-lo);
+  border-radius: 10px;
+  background: var(--hairline-plate);
+}
+
+.td-keybar-label {
+  flex: 0 0 auto;
+}
+
+.td-keybar-keys {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.td-keycap {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--hairline-lo);
+  border-radius: 7px;
+  background: var(--hairline-plate);
+  color: var(--hairline-edge);
+  font-size: 10.5px;
+  text-align: left;
+  white-space: nowrap;
+  transition: border-color 160ms var(--ease), color 160ms var(--ease), background 160ms var(--ease);
+}
+
+.td-keycap kbd {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.td-keycap-lane {
+  font-weight: 700;
+  color: var(--hairline-hi);
+}
+
+.td-keycap-state {
+  margin-left: auto;
+  font-size: 9.5px;
+  letter-spacing: .06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.td-keycap.ready {
+  border-color: var(--hairline-hi);
+  color: var(--hairline-hi);
+}
+
+.td-keycap.ready kbd {
+  border-color: var(--hairline-hi);
+}
+
+.td-keycap.active {
+  border-color: var(--hairline-hi);
+  background: var(--hairline-hi);
+  color: var(--hairline-plate);
+}
+
+.td-keycap.active .td-keycap-lane,
+.td-keycap.active .td-keycap-state {
+  color: var(--hairline-plate);
+}
+
+.td-keycap.active kbd {
+  background: var(--hairline-plate);
+  color: var(--hairline-hi);
+  border-color: var(--hairline-plate);
+}
+
+.td-keycap.cooling {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.td-keycap.cooling kbd {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.td-keycap-cd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--hairline-lo);
+}
+
+.td-keycap-cd-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 140ms linear;
+}
+
+.td-keycap:disabled {
+  cursor: default;
+}
+
+.td-keycap.idle:disabled {
+  opacity: .72;
 }
 
 .td-bump {
@@ -2218,9 +2426,492 @@ body.dark-plate .help-body p {
   font-weight: 700;
 }
 
+@keyframes homeCardSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes viewFadeForward {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes viewFadeBack {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes viewCrossFade {
+  from {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hairlineWipeForward {
+  0% {
+    opacity: 0.9;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  65% {
+    opacity: 0.9;
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+    transform-origin: right center;
+  }
+}
+
+@keyframes hairlineWipeBack {
+  0% {
+    opacity: 0.9;
+    transform: scaleX(0);
+    transform-origin: right center;
+  }
+  65% {
+    opacity: 0.9;
+    transform: scaleX(1);
+    transform-origin: right center;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+}
+
+.view-wipe-line {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--hairline-hi);
+  z-index: 60;
+  pointer-events: none;
+  animation: hairlineWipeForward 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.view-wipe-line.view-wipe--to-home {
+  animation-name: hairlineWipeBack;
+}
+
+.view-stage {
+  width: 100%;
+}
+
+.shell.shell-home > .view-stage {
+  margin: auto 0;
+}
+
+.view-stage--to-game {
+  animation: viewFadeForward 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.view-stage--to-home {
+  animation: viewFadeBack 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.view-stage--switch {
+  animation: viewCrossFade 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── clean centered home landing (Games by Sachit) ── */
+.shell.shell-home {
+  max-width: 1120px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  padding: clamp(28px, 4vh, 48px) clamp(20px, 4vw, 48px);
+}
+
+.home-clean {
+  width: 100%;
+  max-width: 980px;
+  margin: auto;
+  gap: 24px;
+}
+
+.home-header {
+  text-align: center;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.home-brand-title {
+  margin: 8px 0 6px;
+  font-size: clamp(34px, 4.8vw, 52px);
+  line-height: 1.04;
+  letter-spacing: -.025em;
+  font-weight: 800;
+  text-wrap: balance;
+}
+
+.home-brand-sub {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--hairline-edge);
+}
+
+.home-cards-centered {
+  align-items: stretch;
+}
+
+.home-game-card {
+  border-color: var(--hairline-edge);
+  padding: 20px 22px;
+  animation: homeCardSlideUp 380ms var(--ease) both;
+}
+
+.home-game-card:nth-child(2) {
+  animation-delay: 85ms;
+}
+
+.home-game-card h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.home-game-fig {
+  border: 1px solid var(--hairline-lo);
+  border-radius: 9px;
+  padding: 6px 8px;
+  background: var(--hairline-plate);
+  margin: 4px 0;
+}
+
+.home-card-actions {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.home-record-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--hairline-lo);
+  border: 1px solid var(--hairline-lo);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.home-record-strip.home-record-strip-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.card-best-perf {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline-lo);
+  display: grid;
+  gap: 7px;
+}
+
+.card-best-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-best-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--hairline-lo);
+  border: 1px solid var(--hairline-lo);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-best-grid > div {
+  background: var(--hairline-plate);
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card-best-grid b {
+  font-size: 12.5px;
+  color: var(--hairline-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.record-cell {
+  background: var(--hairline-plate);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.record-cell b {
+  font-size: 13px;
+  color: var(--hairline-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Typing Defense Ink Combo HUD indicator ── */
+.td-combo-cell {
+  position: relative;
+  transition: box-shadow 160ms var(--ease);
+}
+
+.td-combo-active {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.td-combo-active .cap {
+  color: var(--accent);
+}
+
+.td-combo-hot {
+  color: var(--accent);
+}
+
+.td-combo-track {
+  width: 100%;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--hairline-lo);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.td-combo-fill {
+  height: 100%;
+  background: var(--hairline-hi);
+  transition: width 160ms linear;
+}
+
+.td-combo-fill.hot {
+  background: var(--accent);
+}
+
+/* ── interactive game-specific tutorial practice controls ── */
+.tut-practice {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--hairline-lo);
+  display: grid;
+  gap: 10px;
+}
+
+.tut-keys-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tut-key-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline-edge);
+  border-bottom-width: 2.5px;
+  background: var(--hairline-plate);
+  color: var(--hairline-edge);
+  font-size: 15px;
+  font-weight: 700;
+  transition: transform 80ms, border-color 140ms, background 140ms, color 140ms;
+}
+
+.tut-key-btn.cur {
+  border-color: var(--hairline-hi);
+  background: var(--hairline-hi);
+  color: var(--hairline-plate);
+}
+
+.tut-key-btn.done {
+  opacity: .42;
+  text-decoration: line-through;
+}
+
+.tut-key-btn:active {
+  transform: translateY(1px);
+}
+
+.tut-feedback {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--hairline-hi);
+}
+
+.onboard-fig .tut-char-done {
+  fill: var(--hairline-mid);
+  text-decoration: line-through;
+}
+
+.onboard-fig .tut-char-cur {
+  fill: var(--hairline-hi);
+  font-weight: 700;
+}
+
+.onboard-fig .tut-char-todo {
+  fill: var(--hairline-edge);
+}
+
+.tool.tut-lane-built {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.tool.tut-lane-next {
+  border-color: var(--hairline-hi);
+  background: var(--hairline-hi);
+  color: var(--hairline-plate);
+  font-weight: 700;
+}
+
+/* ── live tutorial mini-canvas & live defense board ── */
+.tut-stage {
+  padding: 6px;
+}
+
+.tut-canvas-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.tut-mini-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 960 / 420;
+  border-radius: 6px;
+  border: 1px solid var(--hairline-lo);
+}
+
+.tut-canvas-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 2px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  color: var(--hairline-edge);
+}
+
+.tut-def-field {
+  border-radius: 8px;
+  border: 1px solid var(--hairline-lo);
+}
+
+.tut-def-board {
+  aspect-ratio: 960 / 430;
+  width: 100%;
+}
+
+/* ── ErrorBoundary fallback ── */
+.error-fallback {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--page);
+  color: var(--hairline-hi);
+}
+
+.error-card {
+  width: min(500px, 100%);
+  border: 1px solid var(--hairline-edge);
+  border-radius: 12px;
+  background: var(--hairline-plate);
+  padding: 24px;
+}
+
+.error-card h1 {
+  margin: 8px 0 10px;
+  font-size: 26px;
+}
+
+.error-msg {
+  font-size: 11.5px;
+  color: var(--accent);
+  border: 1px dashed var(--hairline-lo);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0 0 16px;
+  word-break: break-word;
+}
+
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
 /* mobile-native bottom thumb dock (hidden on desktop) */
 .mobile-dock {
   display: none;
+}
+
+/* ── extra-large desktop consistent margins ── */
+@media (min-width: 1200px) {
+  .topbar {
+    padding-inline: max(40px, calc((100% - 1120px) / 2 + 40px));
+  }
+  .shell {
+    padding-inline: 40px;
+  }
+  .shell.shell-home {
+    padding: 48px 40px;
+  }
+  .home-clean {
+    max-width: 1040px;
+    gap: 26px;
+  }
+  .home-modes {
+    gap: 22px;
+  }
+  .home-game-card {
+    padding: 24px 26px;
+  }
 }
 
 /* ── responsive ── */
@@ -2252,8 +2943,23 @@ body.dark-plate .help-body p {
   }
   .home-hero,
   .home-modes,
-  .daily-card {
+  .daily-card,
+  .home-record-strip,
+  .home-record-strip.home-record-strip-4 {
     grid-template-columns: 1fr;
+  }
+  .td-keybar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .td-keybar-keys {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .home-cards-centered,
+  .home-record-strip {
+    max-width: 480px;
+    width: 100%;
+    margin-inline: auto;
   }
   .home-strip {
     grid-template-columns: repeat(2, 1fr);
@@ -2265,10 +2971,60 @@ body.dark-plate .help-body p {
     display: none;
   }
   .topbar {
-    padding: 10px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 8px 14px;
+  }
+  .topbar-row {
+    min-height: 36px;
+  }
+  .mobile-header-toggle {
+    display: flex;
+  }
+  .mobile-ctrl-btn {
+    padding: 5px 10px;
+    min-height: 30px;
+  }
+  .mobile-quick-btn {
+    padding: 5px 9px;
+    min-height: 30px;
+    min-width: 32px;
+  }
+  .top-actions {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    padding-top: 8px;
+    transition: grid-template-rows 220ms var(--ease), opacity 180ms var(--ease), padding-top 220ms var(--ease);
+  }
+  .top-actions.is-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    padding-top: 0;
+    pointer-events: none;
+  }
+  .top-actions-inner {
+    overflow: hidden;
+    justify-content: flex-start;
+    gap: 6px;
   }
   .shell {
     padding: 14px 14px calc(78px + env(safe-area-inset-bottom));
+  }
+  .shell.shell-home {
+    padding: 24px 14px;
+    justify-content: safe center;
+  }
+  .home-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .home-card-actions .cta,
+  .home-card-actions .tool {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
   }
   .home-hero-copy {
     padding: 20px 16px;
@@ -2333,15 +3089,40 @@ body.dark-plate .help-body p {
   .td-padtag {
     display: none;
   }
+  .td-keybar {
+    padding: 6px 8px;
+  }
+  .td-keybar-keys {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .td-keycap {
+    min-height: 40px;
+    padding: 5px 6px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .td-keycap-state {
+    margin-left: 0;
+    width: 100%;
+    font-size: 9px;
+  }
+  .card-best-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
   .menu-fig {
     display: none;
   }
   .overlay-card.over-wide .final-stats {
     grid-template-columns: repeat(2, 1fr);
   }
+  .dock-btn:active {
+    background: var(--hairline-lo);
+  }
   .dock-btn.active {
     color: var(--hairline-hi);
     font-weight: 700;
+    box-shadow: inset 0 2px 0 var(--hairline-hi);
   }
 }
 
