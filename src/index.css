@@ -412,6 +412,144 @@ kbd {
   100% { opacity: 0; transform: translate(-50%, -6px); }
 }
 
+.level-wipe-overlay {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 4px 12px;
+  background: color-mix(in srgb, var(--hairline-plate) 88%, transparent);
+  pointer-events: none;
+  z-index: 8;
+  white-space: nowrap;
+}
+
+.level-wipe-rule {
+  display: block;
+  height: 1px;
+  background: var(--hairline-hi);
+  transform-origin: left center;
+  animation: levelRuleWipeTop 1.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.level-wipe-rule--bot {
+  background: var(--hairline-edge);
+  transform-origin: right center;
+  animation-name: levelRuleWipeBot;
+}
+
+.level-wipe-overlay.is-spike .level-wipe-rule--top {
+  height: 1.5px;
+  background: var(--accent);
+}
+
+.level-wipe-body {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: clamp(11px, 1.4vw, 13px);
+  line-height: 1.15;
+  letter-spacing: .28em;
+  animation: levelTextWipe 1.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.level-wipe-title {
+  font-weight: 700;
+  color: var(--hairline-hi);
+}
+
+.level-wipe-overlay.is-spike .level-wipe-title {
+  color: var(--accent);
+}
+
+.level-wipe-sep {
+  width: 1px;
+  height: 11px;
+  background: var(--hairline-edge);
+}
+
+.level-wipe-sub {
+  font-weight: 500;
+  font-size: 0.88em;
+  letter-spacing: .16em;
+  color: var(--hairline-muted);
+}
+
+@keyframes levelTextWipe {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    transform: translateY(3px);
+  }
+  16% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+  78% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0 100%);
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes levelRuleWipeTop {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  18% {
+    opacity: 1;
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+  78% {
+    opacity: 1;
+    transform: scaleX(1);
+    transform-origin: right center;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: right center;
+  }
+}
+
+@keyframes levelRuleWipeBot {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: right center;
+  }
+  18% {
+    opacity: 0.9;
+    transform: scaleX(1);
+    transform-origin: right center;
+  }
+  78% {
+    opacity: 0.9;
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+}
+
 /* overlays */
 .overlay {
   position: absolute;
@@ -3785,5 +3923,8 @@ body.dark-plate .lede strong {
   * {
     animation-duration: .001s !important;
     transition-duration: .001s !important;
+  }
+  .level-wipe-body {
+    clip-path: none !important;
   }
 }

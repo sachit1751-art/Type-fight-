@@ -122,7 +122,13 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
     const [feed, setFeed] = useState<string>(
       'type the first letter of any word to lock on — <b>1 · 2 · 3</b> build turrets'
     );
-    const [banner, setBanner] = useState<{ title: string; sub?: string } | null>(null);
+    const [banner, setBanner] = useState<{
+      title: string;
+      sub?: string;
+      isLevelUp?: boolean;
+      isSpike?: boolean;
+      key: number;
+    } | null>(null);
     const [shaking, setShaking] = useState<boolean>(false);
     const [inkBump, setInkBump] = useState<boolean>(false);
     const [comboBump, setComboBump] = useState<boolean>(false);
@@ -191,9 +197,18 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
           });
         },
         onFeed: msg => setFeed(msg),
-        onBanner: (title, sub) => {
-          if (title) setBanner({ title, sub });
-          else setBanner(null);
+        onBanner: (title, sub, meta) => {
+          if (title) {
+            setBanner({
+              title,
+              sub,
+              isLevelUp: meta?.isLevelUp,
+              isSpike: meta?.isSpike,
+              key: meta?.isLevelUp ? Date.now() + Math.random() : 0,
+            });
+          } else {
+            setBanner(null);
+          }
         },
         onShake: () => {
           setShaking(false);
@@ -622,17 +637,37 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
               ))}
             </div>
 
-            {banner && (
-              <div className="td-banner">
-                {banner.title}
-                {banner.sub && (
-                  <>
-                    {' '}
-                    <small>· {banner.sub}</small>
-                  </>
-                )}
-              </div>
-            )}
+            {banner &&
+              (banner.isLevelUp ? (
+                <div
+                  key={banner.key}
+                  className={`level-wipe-overlay is-levelup${banner.isSpike ? ' is-spike' : ''}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="level-wipe-rule level-wipe-rule--top" aria-hidden="true" />
+                  <span className="level-wipe-body">
+                    <span className="level-wipe-title">{banner.title}</span>
+                    {banner.sub && (
+                      <>
+                        <span className="level-wipe-sep" aria-hidden="true" />
+                        <span className="level-wipe-sub">{banner.sub}</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="level-wipe-rule level-wipe-rule--bot" aria-hidden="true" />
+                </div>
+              ) : (
+                <div className="td-banner">
+                  {banner.title}
+                  {banner.sub && (
+                    <>
+                      {' '}
+                      <small>· {banner.sub}</small>
+                    </>
+                  )}
+                </div>
+              ))}
 
             {/* MENU / PAUSE / GAME OVER OVERLAY */}
             <div className="overlay td-overlay" hidden={!showOverlay}>

@@ -143,7 +143,13 @@ export default function App() {
   const [feedbackKind, setFeedbackKind] = useState<'' | 'good' | 'bad'>('');
   const feedbackTimerRef = useRef<number | null>(null);
 
-  const [waveBanner, setWaveBanner] = useState<{ text: string; key: number } | null>(null);
+  const [waveBanner, setWaveBanner] = useState<{
+    label: string;
+    sub?: string;
+    isLevelUp: boolean;
+    isSpike: boolean;
+    key: number;
+  } | null>(null);
   const waveTimerRef = useRef<number | null>(null);
 
   const [shaking, setShaking] = useState<boolean>(false);
@@ -268,12 +274,20 @@ export default function App() {
     }
   }, []);
 
-  const showWaveBanner = useCallback((w: number) => {
-    setWaveBanner({ text: `WAVE ${w}`, key: Date.now() + Math.random() });
+  const showWaveBanner = useCallback((w: number, isSpike = false) => {
+    const waveTag = `WAVE ${String(w).padStart(2, '0')}`;
+    const isLevelUp = w >= 2;
+    setWaveBanner({
+      label: isLevelUp ? 'LEVEL UP' : waveTag,
+      sub: isLevelUp ? waveTag : undefined,
+      isLevelUp,
+      isSpike,
+      key: Date.now() + Math.random(),
+    });
     if (waveTimerRef.current) window.clearTimeout(waveTimerRef.current);
     waveTimerRef.current = window.setTimeout(() => {
       setWaveBanner(null);
-    }, 1850);
+    }, 1800);
   }, []);
 
   const callbacksRef = useRef<EngineCallbacks>({
@@ -287,8 +301,8 @@ export default function App() {
 
   callbacksRef.current = {
     onFeedback: triggerFeedback,
-    onWave: (w: number) => {
-      showWaveBanner(w);
+    onWave: (w: number, isSpike = false) => {
+      showWaveBanner(w, isSpike);
       syncHudNow();
     },
     onShake: () => {
@@ -945,8 +959,26 @@ export default function App() {
                 />
 
                 {waveBanner && (
-                  <div key={waveBanner.key} className="wave-banner" id="waveBanner">
-                    {waveBanner.text}
+                  <div
+                    key={waveBanner.key}
+                    className={`level-wipe-overlay${waveBanner.isLevelUp ? ' is-levelup' : ''}${
+                      waveBanner.isSpike ? ' is-spike' : ''
+                    }`}
+                    id="waveBanner"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <span className="level-wipe-rule level-wipe-rule--top" aria-hidden="true" />
+                    <span className="level-wipe-body">
+                      <span className="level-wipe-title">{waveBanner.label}</span>
+                      {waveBanner.sub && (
+                        <>
+                          <span className="level-wipe-sep" aria-hidden="true" />
+                          <span className="level-wipe-sub">{waveBanner.sub}</span>
+                        </>
+                      )}
+                    </span>
+                    <span className="level-wipe-rule level-wipe-rule--bot" aria-hidden="true" />
                   </div>
                 )}
 

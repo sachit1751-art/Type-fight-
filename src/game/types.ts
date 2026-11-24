@@ -70,6 +70,18 @@ export interface Particle {
   max: number;
   len: number;
   accent: boolean;
+  gravity?: number;
+  drag?: number;
+}
+
+export interface PulseRing {
+  x: number;
+  y: number;
+  r0: number;
+  r1: number;
+  life: number;
+  max: number;
+  accent: boolean;
 }
 
 export interface FloatText {
@@ -113,6 +125,7 @@ export interface GameState {
   bullets: Bullet[];
   beams: BeamEffect[];
   particles: Particle[];
+  rings: PulseRing[];
   floats: FloatText[];
   spawnT: number;
   kills: number;

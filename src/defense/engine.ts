@@ -175,10 +175,16 @@ export interface DefenseHudSnapshot {
   lastRunRecords: RunRecordFlags | null;
 }
 
+export interface DefenseBannerMeta {
+  isLevelUp?: boolean;
+  isSpike?: boolean;
+  wave?: number;
+}
+
 export interface DefenseCallbacks {
   onHud: (snap: DefenseHudSnapshot) => void;
   onFeed: (html: string) => void;
-  onBanner: (title: string | null, sub?: string) => void;
+  onBanner: (title: string | null, sub?: string, meta?: DefenseBannerMeta) => void;
   onShake: () => void;
 }
 
@@ -1296,6 +1302,30 @@ export class TypingDefenseController {
     });
   }
 
+  private levelUpBurst(): void {
+    this.ripple(KX, KY);
+    const count = 16;
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + randDefense(-0.1, 0.1);
+      const sp = randDefense(36, 78);
+      const s = randDefense(1.8, 3.1);
+      const [a, b] = rings(-s, -s, s, s, s * 0.4, s * 0.25);
+      this.G.shards.push({
+        x: KX + Math.cos(ang) * 18,
+        y: KY + Math.sin(ang) * 18,
+        z: randDefense(24, 92),
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp,
+        vz: randDefense(45, 95),
+        a,
+        b,
+        s,
+        life: randDefense(0.65, 1.0),
+        el: solid(this.gFx),
+      });
+    }
+  }
+
   private startWave(w: number): void {
     this.G.wave = w;
     const overWave = Math.max(0, w - 5);
@@ -1306,20 +1336,34 @@ export class TypingDefenseController {
     this.G.speedMul = (1 + 0.055 * (w - 1) + Math.pow(overWave, 1.35) * 0.14) * chSpeedMul;
     this.G.spawnT = 0.4;
     this.G.inter = 0;
-    this.cb.onBanner(
-      `Wave ${w}`,
+
+    const isLevelUp = w >= 2;
+    const isSpike = w >= 3 && w % 3 === 0;
+    if (isSpike) {
+      this.levelUpBurst();
+    }
+
+    const waveTag = `WAVE ${String(w).padStart(2, '0')}`;
+    const subText =
       w === 3
-        ? 'heralds carry whole lines — spaces count'
+        ? `${waveTag} · heralds carry whole lines`
         : w === 2
-          ? 'brutes join — long words, heavy blows'
-          : ''
-    );
+          ? `${waveTag} · brutes join the march`
+          : isLevelUp
+            ? waveTag
+            : '';
+
+    this.cb.onBanner(isLevelUp ? 'LEVEL UP' : `Wave ${w}`, subText, {
+      isLevelUp,
+      isSpike,
+      wave: w,
+    });
     SFX.wave();
     window.setTimeout(() => {
       if (this.G.inter === 0 && this.G.wave === w && this.G.running) {
         this.cb.onBanner(null);
       }
-    }, 1800);
+    }, 1850);
     this.emitHud();
   }
 

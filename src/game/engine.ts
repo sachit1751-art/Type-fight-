@@ -61,6 +61,7 @@ export function freshState(
     bullets: [],
     beams: [],
     particles: [],
+    rings: [],
     floats: [],
     spawnT: 0.35,
     kills: 0,
@@ -104,9 +105,15 @@ export function getTarget(G: GameState): Enemy | null {
   return next;
 }
 
+export const LEVEL_SPIKE_STEP = 3;
+
+export function isDifficultySpikeWave(wave: number): boolean {
+  return wave >= 3 && wave % LEVEL_SPIKE_STEP === 0;
+}
+
 export interface EngineCallbacks {
   onFeedback: (html: string, kind?: '' | 'good' | 'bad') => void;
-  onWave: (wave: number) => void;
+  onWave: (wave: number, isDifficultySpike?: boolean) => void;
   onShake: () => void;
   onHitVignette: () => void;
   onStreakPop: () => void;
@@ -245,6 +252,49 @@ export function burst(G: GameState, x: number, y: number, n: number, accent = fa
   }
 }
 
+export function levelUpBurst(G: GameState): void {
+  const cx = HERO_X + 4;
+  const cy = HERO_GY - 42;
+
+  G.rings.push(
+    { x: cx, y: cy + 8, r0: 14, r1: 122, life: 0, max: 0.62, accent: false },
+    { x: cx, y: cy + 8, r0: 20, r1: 184, life: 0, max: 0.82, accent: true }
+  );
+
+  const radialCount = 28;
+  for (let i = 0; i < radialCount; i++) {
+    const a = (i / radialCount) * Math.PI * 2 + rand(-0.08, 0.08);
+    const sp = rand(105, 275);
+    G.particles.push({
+      x: cx + Math.cos(a) * 10,
+      y: cy + Math.sin(a) * 10,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp * 0.72 - 18,
+      life: 0,
+      max: rand(0.45, 0.86),
+      len: rand(7, 16),
+      accent: i % 3 === 0,
+      gravity: 34,
+      drag: 0.92,
+    });
+  }
+
+  for (let i = 0; i < 14; i++) {
+    G.particles.push({
+      x: LINE_X + rand(-5, 5),
+      y: rand(302, 368),
+      vx: rand(-26, 36),
+      vy: rand(-145, -55),
+      life: 0,
+      max: rand(0.42, 0.75),
+      len: rand(6, 13),
+      accent: i % 2 === 0,
+      gravity: 42,
+      drag: 0.94,
+    });
+  }
+}
+
 export function floatText(G: GameState, x: number, y: number, text: string, kind: '' | 'good' | 'bad' | 'kill' = ''): void {
   G.floats.push({ x, y, text, kind, life: 0 });
 }
@@ -323,8 +373,12 @@ function checkWave(G: GameState, cb: EngineCallbacks): void {
   const w = Math.floor(G.kills / 8) + 1;
   if (w !== G.wave) {
     G.wave = w;
+    const spike = isDifficultySpikeWave(w);
+    if (spike) {
+      levelUpBurst(G);
+    }
     SFX.wave();
-    cb.onWave(w);
+    cb.onWave(w, spike);
   }
 }
 
@@ -533,11 +587,20 @@ function stepFx(G: GameState, dt: number): void {
   G.beams = G.beams.filter(bm => bm.life < bm.max);
   for (const p of G.particles) {
     p.life += dt;
+    if (p.drag) {
+      const damp = Math.pow(p.drag, dt * 60);
+      p.vx *= damp;
+      p.vy *= damp;
+    }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vy += 190 * dt;
+    p.vy += (p.gravity ?? 190) * dt;
   }
   G.particles = G.particles.filter(p => p.life < p.max);
+  for (const ring of G.rings) {
+    ring.life += dt;
+  }
+  G.rings = G.rings.filter(ring => ring.life < ring.max);
   for (const f of G.floats) {
     f.life += dt;
     f.y -= 26 * dt;
@@ -1141,6 +1204,21 @@ export function drawGame(
       ctx.fillStyle = P.hi;
       ctx.fillText(b.ch, b.x - 3, b.y - 8);
     }
+  }
+
+  for (const ring of G.rings) {
+    const t = ring.life / ring.max;
+    const ease = 1 - Math.pow(1 - t, 3);
+    const radius = ring.r0 + (ring.r1 - ring.r0) * ease;
+    ctx.save();
+    ctx.globalAlpha = (1 - t) * 0.78;
+    setStroke(ctx, ring.accent ? P.accent : P.hi, ring.accent ? 1.15 : 1.35);
+    if (ring.accent) ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.ellipse(ring.x, ring.y, radius, radius * 0.72, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   for (const p of G.particles) {
