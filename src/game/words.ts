@@ -38,7 +38,19 @@ export const WORDS_LONG = [
   'yellowhammer', 'zoetrope',
 ];
 
-export const ALL_WORDS = [...WORDS_SHORT, ...WORDS_MID, ...WORDS_LONG];
+export const WORDS_ELITE = [
+  'acknowledgement', 'architectural', 'bibliographical', 'characteristics',
+  'choreography', 'counterintuitive', 'cryptographic', 'disproportionate',
+  'electromagnetism', 'equilibrium', 'extracurricular', 'heterogeneous',
+  'incomprehensible', 'infrastructure', 'institutionalize', 'intercontinental',
+  'kaleidoscope', 'misinterpretation', 'multiprocessing', 'neurotransmitter',
+  'oversimplification', 'parallelogram', 'perpendicularity', 'pharmaceutical',
+  'photosynthesis', 'procrastination', 'quintessential', 'reconnaissance',
+  'responsibilities', 'semiconductor', 'spectrophotometer', 'synchronization',
+  'telecommunications', 'thermostatistical', 'unconstitutional', 'unpredictability',
+];
+
+export const ALL_WORDS = [...WORDS_SHORT, ...WORDS_MID, ...WORDS_LONG, ...WORDS_ELITE];
 
 export const LINES = [
   'the sun is hot',
@@ -63,6 +75,17 @@ export const LINES = [
   'the fox runs fast',
 ];
 
+export const LINES_HARD = [
+  'counterclockwise synchronization',
+  'unpredictable infrastructure collapse',
+  'simultaneous cryptographic verification',
+  'disproportionate tactical escalation',
+  'intercontinental telecommunications',
+  'electrochemical equilibrium breakdown',
+  'overwhelming ballistic trajectory',
+  'perpendicular perimeter breach',
+];
+
 export const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 export const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 export const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
@@ -70,16 +93,44 @@ export const clamp = (v: number, a: number, b: number): number => Math.max(a, Ma
 export function wordFor(type: EnemyType, wave: number, enemies: Enemy[]): string {
   const inUse = new Set(enemies.map(e => e.word));
   let pool: string[];
-  if (type === 'runner') {
-    pool = WORDS_SHORT.concat(WORDS_MID.filter(w => w.length <= 6));
-  } else if (type === 'brute') {
-    pool = wave >= 3 ? WORDS_LONG : WORDS_MID.filter(w => w.length >= 6).concat(WORDS_LONG.slice(0, 24));
+
+  if (wave >= 10) {
+    // Endgame overdrive: overwhelmingly complex, long spellings across every enemy class
+    pool =
+      type === 'runner'
+        ? WORDS_LONG.filter(w => w.length >= 10).concat(WORDS_ELITE.slice(0, 14))
+        : WORDS_ELITE;
+  } else if (wave >= 7) {
+    // Late waves: word lengths jump steeply so sustained speed & accuracy are tested
+    if (type === 'runner') {
+      pool = WORDS_MID.filter(w => w.length >= 7).concat(WORDS_LONG.filter(w => w.length <= 10));
+    } else if (type === 'brute') {
+      pool = WORDS_ELITE;
+    } else {
+      pool = WORDS_LONG.filter(w => w.length >= 9).concat(WORDS_ELITE.slice(0, 18));
+    }
+  } else if (wave >= 5) {
+    // Mid-late escalation: phase out 3–4 letter words
+    if (type === 'runner') {
+      pool = WORDS_MID.filter(w => w.length >= 5 && w.length <= 7);
+    } else if (type === 'brute') {
+      pool = WORDS_LONG.concat(WORDS_ELITE.slice(0, 10));
+    } else {
+      pool = WORDS_MID.filter(w => w.length >= 6).concat(WORDS_LONG);
+    }
   } else {
-    pool = wave <= 1 ? WORDS_MID.filter(w => w.length <= 7) : WORDS_MID.concat(WORDS_LONG.filter(w => w.length <= 9));
+    if (type === 'runner') {
+      pool = WORDS_SHORT.concat(WORDS_MID.filter(w => w.length <= 6));
+    } else if (type === 'brute') {
+      pool = wave >= 3 ? WORDS_LONG : WORDS_MID.filter(w => w.length >= 6).concat(WORDS_LONG.slice(0, 24));
+    } else {
+      pool = wave <= 1 ? WORDS_MID.filter(w => w.length <= 7) : WORDS_MID.concat(WORDS_LONG.filter(w => w.length <= 9));
+    }
   }
-  for (let i = 0; i < 24; i++) {
+
+  for (let i = 0; i < 28; i++) {
     const w = pick(pool);
     if (!inUse.has(w)) return w;
   }
-  return pick(ALL_WORDS);
+  return pick(pool);
 }

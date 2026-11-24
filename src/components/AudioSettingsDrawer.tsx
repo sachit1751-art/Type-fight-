@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AudioSettings,
   getAudioSettings,
@@ -54,6 +54,8 @@ export const AudioSettingsDrawer: React.FC<AudioSettingsDrawerProps> = ({
 }) => {
   const [audio, setAudio] = useState<AudioSettings>(() => getAudioSettings());
   const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
+  const [dragX, setDragX] = useState(0);
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setAudio(getAudioSettings());
@@ -85,11 +87,34 @@ export const AudioSettingsDrawer: React.FC<AudioSettingsDrawerProps> = ({
     <>
       <div className="help-backdrop" hidden={!open} onClick={onClose} />
       <aside
-        className="help-panel audio-panel"
+        className={`help-panel audio-panel${dragX > 0 ? ' dragging' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="audioSettingsTitle"
         hidden={!open}
+        style={dragX > 0 ? { transform: `translateX(${dragX}px)` } : undefined}
+        onTouchStart={e => {
+          const t = e.touches[0];
+          if (t) swipeRef.current = { x: t.clientX, y: t.clientY };
+        }}
+        onTouchMove={e => {
+          const o = swipeRef.current;
+          const t = e.touches[0];
+          if (!o || !t) return;
+          const dx = t.clientX - o.x;
+          const dy = t.clientY - o.y;
+          if (dx > 14 && dx > Math.abs(dy) * 1.25) {
+            setDragX(Math.min(220, dx));
+          }
+        }}
+        onTouchEnd={e => {
+          const o = swipeRef.current;
+          swipeRef.current = null;
+          const t = e.changedTouches[0];
+          const dx = o && t ? t.clientX - o.x : dragX;
+          setDragX(0);
+          if (dx > 76) onClose();
+        }}
       >
         <div className="help-head">
           <div>

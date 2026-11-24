@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { GameMode } from '../game/types';
 import { KeyboardShortcutsGuide } from './KeyboardShortcutsGuide';
 import { WorkspaceView } from './TopBar';
@@ -23,6 +23,8 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
   onClose,
 }) => {
   const isDefense = activeView === 'defense';
+  const [dragX, setDragX] = useState(0);
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
 
   return (
     <>
@@ -32,11 +34,34 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
         onClick={onClose}
       />
       <aside
-        className="help-panel"
+        className={`help-panel${dragX > 0 ? ' dragging' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="helpTitle"
         hidden={!open}
+        style={dragX > 0 ? { transform: `translateX(${dragX}px)` } : undefined}
+        onTouchStart={e => {
+          const t = e.touches[0];
+          if (t) swipeRef.current = { x: t.clientX, y: t.clientY };
+        }}
+        onTouchMove={e => {
+          const o = swipeRef.current;
+          const t = e.touches[0];
+          if (!o || !t) return;
+          const dx = t.clientX - o.x;
+          const dy = t.clientY - o.y;
+          if (dx > 14 && dx > Math.abs(dy) * 1.25) {
+            setDragX(Math.min(220, dx));
+          }
+        }}
+        onTouchEnd={e => {
+          const o = swipeRef.current;
+          swipeRef.current = null;
+          const t = e.changedTouches[0];
+          const dx = o && t ? t.clientX - o.x : dragX;
+          setDragX(0);
+          if (dx > 76) onClose();
+        }}
       >
         <div className="help-head">
           <div>

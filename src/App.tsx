@@ -50,6 +50,11 @@ import {
 import { buildArcadeShareText, renderArcadeShareCardPng } from './game/shareCard';
 import { computeArcadeRank, RunRecordFlags } from './game/rank';
 import { GameState, HudSnapshot } from './game/types';
+import {
+  centerElementInVisibleViewport,
+  isMobileFocusViewport,
+  isSoftKeyboardActive,
+} from './game/viewportFocus';
 
 const THEME_KEY = 'hairline-type-defense-theme';
 
@@ -148,7 +153,9 @@ export default function App() {
   const [streakPop, setStreakPop] = useState<boolean>(false);
   const streakPopTimerRef = useRef<number | null>(null);
   const [mobileLive, setMobileLive] = useState<boolean>(false);
+  const [mobileViewport, setMobileViewport] = useState<boolean>(isMobileFocusViewport);
   const [softKeyboardOpen, setSoftKeyboardOpen] = useState<boolean>(false);
+  const consoleTouchRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     document.body.classList.toggle('dark-plate', darkMode);
@@ -183,21 +190,27 @@ export default function App() {
     return subscribePlayerHistory(setPlayerHistory);
   }, []);
 
-  /* Detect mobile soft keyboard via visualViewport so dock never overlaps the typing console */
+  /* Detect mobile viewport & soft keyboard via visualViewport + input focus */
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
     const syncViewport = () => {
-      const isNarrow = window.innerWidth <= 720;
-      const keyboardVisible = isNarrow && vv.height < window.innerHeight * 0.74;
-      setSoftKeyboardOpen(keyboardVisible);
+      setMobileViewport(isMobileFocusViewport());
+      setSoftKeyboardOpen(isSoftKeyboardActive());
     };
     syncViewport();
-    vv.addEventListener('resize', syncViewport);
+    vv?.addEventListener('resize', syncViewport);
+    vv?.addEventListener('scroll', syncViewport);
     window.addEventListener('resize', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    document.addEventListener('focusin', syncViewport);
+    document.addEventListener('focusout', syncViewport);
     return () => {
-      vv.removeEventListener('resize', syncViewport);
+      vv?.removeEventListener('resize', syncViewport);
+      vv?.removeEventListener('scroll', syncViewport);
       window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+      document.removeEventListener('focusin', syncViewport);
+      document.removeEventListener('focusout', syncViewport);
     };
   }, []);
 
@@ -335,9 +348,9 @@ export default function App() {
   );
 
   const focusArcadeCard = useCallback((openKeyboard = false) => {
-    if (window.innerWidth <= 720) {
+    if (isMobileFocusViewport()) {
       window.requestAnimationFrame(() => {
-        stageWrapRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        centerElementInVisibleViewport(stageWrapRef.current, 'smooth');
         if (openKeyboard) {
           setMobileLive(true);
           mobileInputRef.current?.focus({ preventScroll: true });
@@ -753,6 +766,44 @@ export default function App() {
   const isActivelyPlaying =
     (activeView === 'arcade' && hud.mode === 'playing') ||
     (activeView === 'defense' && defenseStatus.running && !defenseStatus.paused && !defenseStatus.over);
+  const mobileFocusActive =
+    mobileViewport && isActivelyPlaying && !helpOpen && !audioOpen && !tutorialOpen;
+
+  /* Sync body focus-mode classes so CSS compacts non-essential chrome during mobile play */
+  useEffect(() => {
+    document.body.classList.toggle('mobile-focus-active', mobileFocusActive);
+    document.body.classList.toggle('mobile-keyboard-open', mobileFocusActive && softKeyboardOpen);
+    return () => {
+      document.body.classList.remove('mobile-focus-active');
+      document.body.classList.remove('mobile-keyboard-open');
+    };
+  }, [mobileFocusActive, softKeyboardOpen]);
+
+  /* Keep active Type Arcade card centered across mobile screen resize / keyboard events */
+  useEffect(() => {
+    if (activeView !== 'arcade' || hud.mode !== 'playing') return;
+    let settleTimer = 0;
+    const recenter = () => {
+      if (!isMobileFocusViewport()) return;
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        window.requestAnimationFrame(() => {
+          centerElementInVisibleViewport(stageWrapRef.current, 'smooth');
+        });
+      }, 85);
+    };
+    recenter();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', recenter);
+    window.addEventListener('resize', recenter);
+    window.addEventListener('orientationchange', recenter);
+    return () => {
+      window.clearTimeout(settleTimer);
+      vv?.removeEventListener('resize', recenter);
+      window.removeEventListener('resize', recenter);
+      window.removeEventListener('orientationchange', recenter);
+    };
+  }, [activeView, hud.mode, softKeyboardOpen]);
 
   return (
     <>
@@ -1117,7 +1168,28 @@ export default function App() {
               </div>
 
               {/* ── TYPING CONSOLE ── */}
-              <div className="console" id="consoleBar">
+              <div
+                className="console"
+                id="consoleBar"
+                onTouchStart={e => {
+                  const t = e.touches[0];
+                  if (t) consoleTouchRef.current = { x: t.clientX, y: t.clientY };
+                }}
+                onTouchEnd={e => {
+                  const o = consoleTouchRef.current;
+                  consoleTouchRef.current = null;
+                  const t = e.changedTouches[0];
+                  if (!o || !t) return;
+                  const dx = t.clientX - o.x;
+                  const dy = t.clientY - o.y;
+                  if (Math.abs(dy) < 42 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
+                  if (dy < 0 && gameRef.current.mode === 'playing') {
+                    focusArcadeCard(true);
+                  } else if (dy > 0 && gameRef.current.mode === 'playing') {
+                    togglePause(true);
+                  }
+                }}
+              >
                 <div className={`console-target${hud.targetWord ? ' has-target' : ''}`}>
                   {targetCleanKey > 0 && (
                     <span key={targetCleanKey} className="target-sweep" aria-hidden="true" />
@@ -1171,15 +1243,29 @@ export default function App() {
                   })}
                 </div>
 
-                <button
-                  className="tool console-key"
-                  id="btnKeyboard"
-                  type="button"
-                  title="Open the touch / on-screen keyboard"
-                  onClick={handleKeyboardClick}
-                >
-                  ⌨ TYPE HERE
-                </button>
+                <div className="console-actions">
+                  <button
+                    className="tool console-pause-btn"
+                    type="button"
+                    title="Pause game"
+                    aria-label="Pause game"
+                    onClick={e => {
+                      togglePause(true);
+                      e.currentTarget.blur();
+                    }}
+                  >
+                    Ⅱ
+                  </button>
+                  <button
+                    className="tool console-key"
+                    id="btnKeyboard"
+                    type="button"
+                    title="Open the touch / on-screen keyboard"
+                    onClick={handleKeyboardClick}
+                  >
+                    ⌨ TYPE HERE
+                  </button>
+                </div>
 
                 <input
                   ref={mobileInputRef}

@@ -11,7 +11,7 @@ import {
   Pillar,
   Pose,
 } from './types';
-import { clamp, LINES, pick, rand, wordFor } from './words';
+import { clamp, LINES, LINES_HARD, pick, rand, wordFor } from './words';
 
 export const W = 960;
 export const H = 420;
@@ -134,12 +134,14 @@ export function spawnEnemy(G: GameState, cb: EngineCallbacks): void {
   const challengeSpeedMul = G.challenge?.enemySpeedMul ?? 1;
 
   const linesUnlocked = wave >= 3 || G.runTime >= 75;
-  const isLine = linesUnlocked && type !== 'runner' && Math.random() < 0.34;
+  const lineChance = wave >= 6 ? Math.min(0.55, 0.34 + (wave - 5) * 0.045) : 0.34;
+  const isLine = linesUnlocked && type !== 'runner' && Math.random() < lineChance;
   let word = wordFor(type, wave, G.enemies);
   if (isLine) {
     const inUse = new Set(G.enemies.map(e => e.word));
-    word = pick(LINES);
-    for (let i = 0; i < 24 && inUse.has(word); i++) word = pick(LINES);
+    const linePool = wave >= 7 ? LINES_HARD : LINES;
+    word = pick(linePool);
+    for (let i = 0; i < 24 && inUse.has(word); i++) word = pick(linePool);
     if (!G.linesIntroduced) {
       G.linesIntroduced = true;
       cb.onFeedback('new carriers ahead: <b>LINES</b> — type the whole line, <b>spaces</b> too!', 'good');
@@ -150,6 +152,9 @@ export function spawnEnemy(G: GameState, cb: EngineCallbacks): void {
   for (const o of G.enemies) {
     if (o.state === 'alive') spawnX = Math.max(spawnX, o.x + rand(60, 120));
   }
+
+  const overWave = Math.max(0, wave - 5);
+  const overSpeed = Math.pow(overWave, 1.38) * 7.5;
 
   G.enemies.push({
     id: G.nextId++,
@@ -162,14 +167,14 @@ export function spawnEnemy(G: GameState, cb: EngineCallbacks): void {
     x: spawnX,
     gy: lane.gy,
     s: lane.s * scaleMul,
-    speed: (30 + wave * 2.1 + rand(0, 10)) * typeMul * challengeSpeedMul * (isLine ? 0.72 : 1),
+    speed: (30 + wave * 2.2 + overSpeed + rand(0, 10)) * typeMul * challengeSpeedMul * (isLine ? 0.78 : 1),
     phase: rand(0, Math.PI * 2),
     state: 'alive',
     deathT: 0,
     flashT: 0,
     shakeT: 0,
     kb: 0,
-    attackCd: rand(0.7, 1.2),
+    attackCd: rand(0.5, 1.0),
     muzzleT: 0,
     seed: rand(0, 100),
   });
@@ -212,7 +217,8 @@ export function heroPose(G: GameState): Pose {
     const tc = { x: t.x, y: t.gy - 42 * t.s };
     aim = Math.atan2(tc.y - (HERO_GY - 43), tc.x - HERO_X);
   }
-  return pose(HERO_X, HERO_GY, 1.06, 1, G.hero.phase, false, aim, G.hero.recoil);
+  const breath = Math.sin(G.hero.phase * 1.1) * 1.1;
+  return pose(HERO_X, HERO_GY + breath, 1.06, 1, G.hero.phase, false, aim, G.hero.recoil);
 }
 
 export function enemyPose(e: Enemy): Pose {
@@ -502,7 +508,9 @@ function bulletHit(G: GameState, b: Bullet, cb: EngineCallbacks): void {
     floatText(G, HERO_X + 26, HERO_GY - 96, '⬡ BLOCKED', 'good');
     SFX.block();
   } else {
-    const dmg = G.challenge?.typoDmgArcade ?? 8;
+    const baseDmg = G.challenge?.typoDmgArcade ?? 8;
+    const overDmg = Math.floor(Math.max(0, G.wave - 6) * 2.2);
+    const dmg = baseDmg + overDmg;
     G.hero.hp = Math.max(0, G.hero.hp - dmg);
     G.hero.hurtT = 0.3;
     G.hero.flashT = 0.2;
@@ -581,13 +589,18 @@ export function updateGame(G: GameState, dt: number, cb: EngineCallbacks): void 
   }
 
   G.spawnT -= dt;
-  const cap = Math.min(6, 3 + G.wave);
+  const overWave = Math.max(0, G.wave - 5);
+  const cap = G.wave <= 5 ? Math.min(6, 3 + G.wave) : Math.min(14, 6 + overWave * 2);
   const spawnMul = G.challenge?.spawnMul ?? 1;
   if (G.spawnT <= 0 && aliveEnemies(G).length < cap) {
     spawnEnemy(G, cb);
-    G.spawnT = Math.max(1.05, 2.55 - G.wave * 0.15) * spawnMul * rand(0.75, 1.25);
+    if (G.wave >= 8 && aliveEnemies(G).length < cap && Math.random() < Math.min(0.65, overWave * 0.14)) {
+      spawnEnemy(G, cb);
+    }
+    G.spawnT = Math.max(0.36, 2.55 - G.wave * 0.16 - overWave * 0.12) * spawnMul * rand(0.75, 1.2);
   }
 
+  const lineAttackInterval = Math.max(0.45, 1.35 - overWave * 0.12);
   for (const e of G.enemies) {
     e.flashT = Math.max(0, e.flashT - dt);
     e.shakeT = Math.max(0, e.shakeT - dt);
@@ -606,7 +619,7 @@ export function updateGame(G: GameState, dt: number, cb: EngineCallbacks): void 
       e.attackCd -= dt;
       if (e.attackCd <= 0) {
         fireEnemyBullet(G, e);
-        e.attackCd = 1.35;
+        e.attackCd = lineAttackInterval;
       }
     }
   }
@@ -759,6 +772,13 @@ interface StickDrawOpts {
 function drawStick(ctx: CanvasRenderingContext2D, p: Pose, o: StickDrawOpts, P: Palette): void {
   ctx.save();
   if (o.deadT > 0) {
+    ctx.save();
+    setStroke(ctx, P.edge, 1);
+    ctx.globalAlpha = Math.max(0, (1 - o.deadT) * 0.65);
+    ctx.beginPath();
+    ctx.ellipse(p.footA.x, p.footA.y + 3, (10 + o.deadT * 26) * o.s, (3 + o.deadT * 5) * o.s, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
     ctx.translate(p.footA.x, p.footA.y);
     ctx.rotate(-o.facing * o.deadT * 1.35);
     ctx.translate(-p.footA.x, -p.footA.y);
@@ -1028,10 +1048,11 @@ export function drawGame(
     line(ctx, hp.muzzle.x, hp.muzzle.y, target.x, target.gy - 42 * target.s);
     ctx.setLineDash([]);
 
+    const pulse = 1 + Math.sin(G.time * 6) * 0.08;
     setStroke(ctx, P.hi, 1.1);
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.ellipse(target.x, target.gy + 5, 20 * target.s, 6 * target.s, 0, 0, Math.PI * 2);
+    ctx.ellipse(target.x, target.gy + 5, 20 * target.s * pulse, 6 * target.s * pulse, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
   }

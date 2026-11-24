@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { DailyChallenge, DailyProgress, getNextRotationCountdown } from '../game/challenge';
 import { PlayerHistory } from '../game/history';
 
@@ -13,6 +13,23 @@ interface HomeLandingProps {
   onStartDefense: (daily?: boolean) => void;
 }
 
+function handleCardPointerMove(e: React.PointerEvent<HTMLElement>) {
+  if (e.pointerType !== 'mouse') return;
+  const el = e.currentTarget;
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const nx = (e.clientX - rect.left) / rect.width - 0.5;
+  const ny = (e.clientY - rect.top) / rect.height - 0.5;
+  el.style.setProperty('--tilt-x', `${(nx * 3.2).toFixed(2)}deg`);
+  el.style.setProperty('--tilt-y', `${(-ny * 3.2).toFixed(2)}deg`);
+}
+
+function handleCardPointerLeave(e: React.PointerEvent<HTMLElement>) {
+  const el = e.currentTarget;
+  el.style.removeProperty('--tilt-x');
+  el.style.removeProperty('--tilt-y');
+}
+
 export const HomeLanding: React.FC<HomeLandingProps> = ({
   dailyChallenge,
   dailyProgress,
@@ -25,6 +42,23 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 }) => {
   const countdown = getNextRotationCountdown();
   const todayRecord = dailyProgress.days[dailyChallenge.dateKey];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === '1') {
+        e.preventDefault();
+        onStartArcade(false);
+      } else if (e.key === '2') {
+        e.preventDefault();
+        onStartDefense(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onStartArcade, onStartDefense]);
 
   const lastGame = playerHistory.lastPlayedGame;
   const lastSummary = lastGame ? playerHistory[lastGame] : null;
@@ -87,7 +121,11 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
       {/* ── TWO CLEAN GAME CARDS ── */}
       <div className="home-modes home-cards-centered">
         {/* Card 1: Type Arcade */}
-        <article className="home-mode-card home-game-card">
+        <article
+          className="home-mode-card home-game-card"
+          onPointerMove={handleCardPointerMove}
+          onPointerLeave={handleCardPointerLeave}
+        >
           <span className="card-reg-tl" aria-hidden="true" />
           <span className="card-reg-br" aria-hidden="true" />
           <div className="mode-card-head">
@@ -190,7 +228,11 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
         </article>
 
         {/* Card 2: Typing Defence */}
-        <article className="home-mode-card home-game-card">
+        <article
+          className="home-mode-card home-game-card"
+          onPointerMove={handleCardPointerMove}
+          onPointerLeave={handleCardPointerLeave}
+        >
           <span className="card-reg-tl" aria-hidden="true" />
           <span className="card-reg-br" aria-hidden="true" />
           <div className="mode-card-head">

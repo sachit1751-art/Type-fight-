@@ -100,6 +100,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 }) => {
   const [step, setStep] = useState<0 | 1>(0);
   const [statusMsg, setStatusMsg] = useState<string>('');
+  const [swipeDx, setSwipeDx] = useState<number>(0);
+  const swipeOriginRef = useRef<{ x: number; y: number } | null>(null);
 
   // Type Arcade Mini-Canvas Refs & State
   const arcadeCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -440,11 +442,49 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       }}
     >
       <div
-        className="onboard-modal"
+        className={`onboard-modal${swipeDx !== 0 ? ' swiping' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboardTitle"
+        style={swipeDx !== 0 ? { transform: `translateX(${swipeDx}px)` } : undefined}
         onClick={e => e.stopPropagation()}
+        onTouchStart={e => {
+          const t = e.touches[0];
+          if (!t) return;
+          swipeOriginRef.current = { x: t.clientX, y: t.clientY };
+        }}
+        onTouchMove={e => {
+          const origin = swipeOriginRef.current;
+          const t = e.touches[0];
+          if (!origin || !t) return;
+          const dx = t.clientX - origin.x;
+          const dy = t.clientY - origin.y;
+          if (Math.abs(dx) > Math.abs(dy) * 1.25 && Math.abs(dx) > 12) {
+            setSwipeDx(Math.max(-44, Math.min(44, dx * 0.4)));
+          }
+        }}
+        onTouchEnd={e => {
+          const origin = swipeOriginRef.current;
+          swipeOriginRef.current = null;
+          setSwipeDx(0);
+          const t = e.changedTouches[0];
+          if (!origin || !t) return;
+          const dx = t.clientX - origin.x;
+          const dy = t.clientY - origin.y;
+          if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+          if (dx < 0) {
+            if (step === 0) {
+              ensureAudio();
+              SFX.wave();
+              setStep(1);
+            } else {
+              finishAndEnter();
+            }
+          } else if (dx > 0 && step === 1) {
+            ensureAudio();
+            setStep(0);
+          }
+        }}
       >
         <div className="onboard-head">
           <div className="onboard-head-left">
@@ -505,7 +545,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           </div>
         </div>
 
-        <div className="onboard-body">
+        <div key={`${targetGame}-${step}`} className="onboard-body">
           {/* Interactive Live Mini-Canvas (Type Arcade) or Real Isometric Board (Typing Defence) */}
           <div className="onboard-fig-wrap tut-stage">
             {isArcade ? (

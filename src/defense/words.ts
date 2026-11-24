@@ -7,6 +7,9 @@ export const DEFENSE_MID =
 export const DEFENSE_LONG =
   'barricade,battlement,blacksmith,blueprint,catapult,chronicle,drawbridge,earthwork,embrasure,fortitude,garrison,gatehouse,guardian,hairline,horseshoe,isometric,keystroke,labyrinth,lighthouse,longbowman,machinery,mountaineer,nightwatch,outrider,palisade,parchment,pathfinder,portcullis,quartermaster,rainmaker,scaffolding,silhouette,stronghold,trebuchet,undercroft,vanguard,watchtower,wheelwright,yeomanry'.split(',');
 
+export const DEFENSE_ELITE =
+  'acknowledgement,architectural,bibliographical,characteristics,counterfortress,counterintuitive,cryptographic,disproportionate,electromagnetism,extracurricular,heterogeneous,incomprehensible,infrastructure,institutionalize,intercontinental,kaleidoscope,misinterpretation,multiprocessing,neurotransmitter,oversimplification,perpendicularity,photosynthesis,procrastination,quintessential,reconnaissance,responsibilities,semiconductor,synchronization,telecommunications,unconstitutional,unpredictability'.split(',');
+
 export const DEFENSE_LINES = [
   'hold the line',
   'raise the gate',
@@ -24,6 +27,16 @@ export const DEFENSE_LINES = [
   'a quick red fox',
   'keep the fire',
   'shields up now',
+];
+
+export const DEFENSE_LINES_HARD = [
+  'fortify the perpendicular ramparts',
+  'counterclockwise turret synchronization',
+  'simultaneous perimeter bombardment',
+  'unpredictable bastion reinforcement',
+  'intercontinental signal transmission',
+  'disproportionate vanguard offensive',
+  'crystallized architectural equilibrium',
 ];
 
 export const pickDefense = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];

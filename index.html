@@ -13,7 +13,14 @@
       content="typing game, type arcade, typing defense, games by sachit, hairline typing, WPM speed test game, browser typing shooter, isometric typing tower defense, D3 WPM chart"
     />
     <meta name="author" content="Sachit" />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="creator" content="Sachit" />
+    <meta name="publisher" content="Games by Sachit" />
+    <meta name="application-name" content="HAIRLINE Typing Arcade" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="HAIRLINE" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#08090a" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -32,18 +39,23 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://type-fg.sachit1751.workers.dev/" />
     <meta property="og:locale" content="en_US" />
+    <meta property="og:updated_time" content="2026-11-24T11:00:00Z" />
+    <meta property="og:see_also" content="https://type-fg.sachit1751.workers.dev/llms-full.txt" />
     <meta property="og:image" content="https://type-fg.sachit1751.workers.dev/og-image.jpg" />
     <meta property="og:image:secure_url" content="https://type-fg.sachit1751.workers.dev/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
-    <meta property="og:image:width" content="1376" />
-    <meta property="og:image:height" content="768" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="HAIRLINE architectural hairline illustration showing Type Arcade stick-figure shooter and Typing Defense isometric keep"
+      content="Games by Sachit — HAIRLINE minimalist typography card featuring Type Arcade and Typing Defense"
     />
 
     <!-- Twitter / X Cards -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:domain" content="type-fg.sachit1751.workers.dev" />
+    <meta name="twitter:url" content="https://type-fg.sachit1751.workers.dev/" />
+    <meta name="twitter:creator" content="@sachit" />
     <meta name="twitter:title" content="HAIRLINE — Type Arcade &amp; Typing Defense" />
     <meta
       name="twitter:description"
@@ -52,7 +64,7 @@
     <meta name="twitter:image" content="https://type-fg.sachit1751.workers.dev/og-image.jpg" />
     <meta
       name="twitter:image:alt"
-      content="HAIRLINE architectural hairline illustration showing Type Arcade and Typing Defense"
+      content="Games by Sachit — HAIRLINE minimalist typography card featuring Type Arcade and Typing Defense"
     />
 
     <!-- Structured Data (Schema.org JSON-LD) -->
@@ -61,22 +73,58 @@
         "@context": "https://schema.org",
         "@graph": [
           {
+            "@type": "Person",
+            "@id": "https://type-fg.sachit1751.workers.dev/#author",
+            "name": "Sachit"
+          },
+          {
+            "@type": "ImageObject",
+            "@id": "https://type-fg.sachit1751.workers.dev/#og-image",
+            "url": "https://type-fg.sachit1751.workers.dev/og-image.jpg",
+            "contentUrl": "https://type-fg.sachit1751.workers.dev/og-image.jpg",
+            "encodingFormat": "image/jpeg",
+            "width": 1200,
+            "height": 630,
+            "caption": "Games by Sachit — HAIRLINE minimalist typography card featuring Type Arcade and Typing Defense"
+          },
+          {
             "@type": "WebSite",
+            "@id": "https://type-fg.sachit1751.workers.dev/#website",
             "name": "Games by Sachit — HAIRLINE",
-            "url": "https://type-fg.sachit1751.workers.dev/"
+            "url": "https://type-fg.sachit1751.workers.dev/",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://type-fg.sachit1751.workers.dev/#author" },
+            "mainEntity": { "@id": "https://type-fg.sachit1751.workers.dev/#collection" }
           },
           {
             "@type": "WebApplication",
+            "@id": "https://type-fg.sachit1751.workers.dev/#webapp",
             "name": "HAIRLINE — Type Arcade & Typing Defense",
             "url": "https://type-fg.sachit1751.workers.dev/",
-            "image": "https://type-fg.sachit1751.workers.dev/og-image.jpg",
-            "author": {
-              "@type": "Person",
-              "name": "Sachit"
-            },
+            "image": { "@id": "https://type-fg.sachit1751.workers.dev/#og-image" },
+            "screenshot": { "@id": "https://type-fg.sachit1751.workers.dev/#og-image" },
+            "author": { "@id": "https://type-fg.sachit1751.workers.dev/#author" },
+            "publisher": { "@id": "https://type-fg.sachit1751.workers.dev/#author" },
             "applicationCategory": "GameApplication",
+            "applicationSubCategory": "Educational Typing Game",
+            "softwareVersion": "2.0",
+            "inLanguage": "en",
+            "isAccessibleForFree": true,
             "operatingSystem": "All",
             "browserRequirements": "Requires JavaScript and HTML5 Canvas / SVG",
+            "keywords": "typing game, type arcade, typing defense, WPM speed test, zero-backspace typing, D3 WPM chart, tower defense typing",
+            "accessibilityControl": ["fullKeyboardControl", "fullTouchControl", "fullMouseControl"],
+            "accessibilityFeature": ["highContrastDisplay", "reducedMotion", "keyboardNavigation", "audioDescription"],
+            "featureList": [
+              "Strict 1:1 zero-backspace positional typing in Type Arcade",
+              "Three-lane isometric turret defense with Ink combo multipliers in Typing Defense",
+              "Daily Rotating Challenge mode with custom weapon rulesets",
+              "Post-run D3.js WPM trend chart with peak and average benchmarks",
+              "All-Time Fastest WPM, Best Score, and Lifetime Best Accuracy tracking",
+              "Mobile Focus Mode that centers the active game card above touch keyboards",
+              "Light and Dark architectural hairline plates plus optional drafting grid",
+              "Procedural Web Audio sound synthesizer with per-category mixer"
+            ],
             "description": "A minimalist hairline-illustrated typing game collection featuring Type Arcade (side-scroller typing shooter) and Typing Defense (isometric three-lane turret defense) with D3 WPM trend charts.",
             "offers": {
               "@type": "Offer",
@@ -86,23 +134,116 @@
           },
           {
             "@type": "VideoGame",
+            "@id": "https://type-fg.sachit1751.workers.dev/#arcade",
             "name": "HAIRLINE / Type Arcade",
             "url": "https://type-fg.sachit1751.workers.dev/",
-            "image": "https://type-fg.sachit1751.workers.dev/og-image.jpg",
+            "image": { "@id": "https://type-fg.sachit1751.workers.dev/#og-image" },
+            "author": { "@id": "https://type-fg.sachit1751.workers.dev/#author" },
             "genre": ["Typing Game", "Arcade Shooter"],
-            "gamePlatform": "Web Browser",
+            "gamePlatform": ["Web Browser", "Mobile Browser"],
+            "applicationCategory": "GameApplication",
             "playMode": "SinglePlayer",
-            "description": "Stick-figure typing shooter where every manually typed letter fires a rifle round, clean words raise a shield, and mistyped letters trigger enemy return fire."
+            "numberOfPlayers": { "@type": "QuantitativeValue", "value": 1 },
+            "inLanguage": "en",
+            "isAccessibleForFree": true,
+            "gameItem": "1:1 rifle rounds, clean-word deflecting shields, Daily Challenge weapons (Twin-Bolt, Railgun, Scattergun, Hyper-Carbine)",
+            "softwareHelp": {
+              "@type": "CreativeWork",
+              "url": "https://type-fg.sachit1751.workers.dev/llms-full.txt"
+            },
+            "description": "Stick-figure typing shooter where every manually typed letter fires a rifle round, two consecutive clean words raise a deflecting shield, and mistyped letters trigger enemy return fire."
           },
           {
             "@type": "VideoGame",
+            "@id": "https://type-fg.sachit1751.workers.dev/#defense",
             "name": "HAIRLINE / Typing Defense",
             "url": "https://type-fg.sachit1751.workers.dev/",
-            "image": "https://type-fg.sachit1751.workers.dev/og-image.jpg",
+            "image": { "@id": "https://type-fg.sachit1751.workers.dev/#og-image" },
+            "author": { "@id": "https://type-fg.sachit1751.workers.dev/#author" },
             "genre": ["Typing Game", "Tower Defense"],
-            "gamePlatform": "Web Browser",
+            "gamePlatform": ["Web Browser", "Mobile Browser"],
+            "applicationCategory": "GameApplication",
             "playMode": "SinglePlayer",
-            "description": "Isometric three-lane typing defense where players chain rapid kills for Ink combo multipliers, deploy turrets with keys 1 to 3, and track WPM trends."
+            "numberOfPlayers": { "@type": "QuantitativeValue", "value": 1 },
+            "inLanguage": "en",
+            "isAccessibleForFree": true,
+            "gameItem": "Three lane turrets (keys 1, 2, 3), Ink currency, consecutive-kill Ink Combo Multipliers (up to x4), Keep HP windows and shield rings",
+            "softwareHelp": {
+              "@type": "CreativeWork",
+              "url": "https://type-fg.sachit1751.workers.dev/llms-full.txt"
+            },
+            "description": "Isometric three-lane typing defense where players chain rapid kills for Ink combo multipliers, deploy lane turrets with keys 1 to 3, and track WPM trends."
+          },
+          {
+            "@type": "ItemList",
+            "@id": "https://type-fg.sachit1751.workers.dev/#collection",
+            "name": "HAIRLINE Typing Games Collection",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "item": { "@id": "https://type-fg.sachit1751.workers.dev/#arcade" } },
+              { "@type": "ListItem", "position": 2, "item": { "@id": "https://type-fg.sachit1751.workers.dev/#defense" } }
+            ]
+          },
+          {
+            "@type": "HowTo",
+            "@id": "https://type-fg.sachit1751.workers.dev/#howto-play",
+            "name": "How to play HAIRLINE Type Arcade and Typing Defense",
+            "description": "Quick guide to mastering zero-backspace typing combat and turret defense.",
+            "step": [
+              {
+                "@type": "HowToStep",
+                "position": 1,
+                "name": "Choose Type Arcade or Typing Defense",
+                "text": "Select Standard or today's Daily Challenge ruleset from the landing page."
+              },
+              {
+                "@type": "HowToStep",
+                "position": 2,
+                "name": "Type straight through without Backspace",
+                "text": "Type the target word letter by letter. Every key advances the target cursor; mistyped keys fire enemy retaliation."
+              },
+              {
+                "@type": "HowToStep",
+                "position": 3,
+                "name": "Build lane turrets and chain Ink combos",
+                "text": "In Typing Defense, chain consecutive kills without missing to raise your Ink Multiplier, and press keys 1, 2, or 3 to deploy or upgrade lane turrets."
+              },
+              {
+                "@type": "HowToStep",
+                "position": 4,
+                "name": "Review your D3 WPM chart",
+                "text": "Inspect post-run WPM peaks, run grade, and personal bests saved locally in your browser."
+              }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://type-fg.sachit1751.workers.dev/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Does Backspace work in HAIRLINE typing games?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Both Type Arcade and Typing Defense use zero-backspace positional typing where every letter you press counts immediately and moves forward."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do turret controls and the Ink Combo Multiplier work in Typing Defense?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Defeating walkers without breaking focus builds an Ink Combo Multiplier up to 4x bonus Ink. Press keys 1, 2, or 3 (or tap the on-screen turret keybar) to build or upgrade turrets on lanes 1 through 3."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Where is player history such as All-Time Fastest WPM stored?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "All scores, All-Time Fastest WPM, Lifetime Best Accuracy, and preferences are persisted privately in browser localStorage with no account required."
+                }
+              }
+            ]
           }
         ]
       }

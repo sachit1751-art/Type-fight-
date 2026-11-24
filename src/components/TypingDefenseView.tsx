@@ -14,6 +14,7 @@ import { buildDefenseShareText, renderDefenseShareCardPng } from '../game/shareC
 import { MenuKeepFigure } from './MenuKeepFigure';
 import { SocialShareBar } from './SocialShareBar';
 import { WpmTrendChart } from './WpmTrendChart';
+import { centerElementInVisibleViewport, isMobileFocusViewport } from '../game/viewportFocus';
 
 export interface TypingDefenseHandle {
   togglePause: () => void;
@@ -117,6 +118,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
 
     const [hud, setHud] = useState<DefenseHudSnapshot>(INITIAL_HUD);
     const [mobileLive, setMobileLive] = useState<boolean>(false);
+    const consoleTouchRef = useRef<{ x: number; y: number } | null>(null);
     const [feed, setFeed] = useState<string>(
       'type the first letter of any word to lock on — <b>1 · 2 · 3</b> build turrets'
     );
@@ -262,9 +264,9 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
     }, [tutorialOpen, hud.paused, hud.running]);
 
     const focusPlayCard = useCallback((openKeyboard = false) => {
-      if (window.innerWidth <= 720) {
+      if (isMobileFocusViewport()) {
         window.requestAnimationFrame(() => {
-          stageWrapRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          centerElementInVisibleViewport(stageWrapRef.current, 'smooth');
           if (openKeyboard) {
             setMobileLive(true);
             mobileInputRef.current?.focus({ preventScroll: true });
@@ -277,6 +279,32 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
         });
       }
     }, []);
+
+    // Keep active Typing Defence card centered across mobile screen resize / keyboard events
+    useEffect(() => {
+      if (!hud.running || hud.paused || hud.over || helpOpen || audioOpen || tutorialOpen) return;
+      let settleTimer = 0;
+      const recenter = () => {
+        if (!isMobileFocusViewport()) return;
+        window.clearTimeout(settleTimer);
+        settleTimer = window.setTimeout(() => {
+          window.requestAnimationFrame(() => {
+            centerElementInVisibleViewport(stageWrapRef.current, 'smooth');
+          });
+        }, 85);
+      };
+      recenter();
+      const vv = window.visualViewport;
+      vv?.addEventListener('resize', recenter);
+      window.addEventListener('resize', recenter);
+      window.addEventListener('orientationchange', recenter);
+      return () => {
+        window.clearTimeout(settleTimer);
+        vv?.removeEventListener('resize', recenter);
+        window.removeEventListener('resize', recenter);
+        window.removeEventListener('orientationchange', recenter);
+      };
+    }, [hud.running, hud.paused, hud.over, helpOpen, audioOpen, tutorialOpen]);
 
     const startGame = useCallback(() => {
       prevOverRef.current = false;
@@ -416,7 +444,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
               </div>
               <b className="mono">{hud.hp}</b>
             </div>
-            <span className={`shield-status mono${hud.shield > 0 ? ' on' : ''}`}>
+            <span key={`td-sh-${hud.shield}`} className={`shield-status mono${hud.shield > 0 ? ' on hud-pop' : ''}`}>
               {shieldLabel}
             </span>
           </div>
@@ -439,7 +467,9 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
 
           <div className="hud-cell td-hide-xs">
             <span className="cap">Wave</span>
-            <b className="hud-num mono">{hud.wave}</b>
+            <b key={`td-w-${hud.wave}`} className="hud-num mono hud-pop">
+              {hud.wave}
+            </b>
           </div>
 
           <div className="hud-cell">
@@ -797,7 +827,27 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
           </div>
 
           {/* ── TYPING CONSOLE & LANE TURRET BUILDERS ── */}
-          <div className="console">
+          <div
+            className="console"
+            onTouchStart={e => {
+              const t = e.touches[0];
+              if (t) consoleTouchRef.current = { x: t.clientX, y: t.clientY };
+            }}
+            onTouchEnd={e => {
+              const o = consoleTouchRef.current;
+              consoleTouchRef.current = null;
+              const t = e.changedTouches[0];
+              if (!o || !t || !hud.running || hud.paused) return;
+              const dx = t.clientX - o.x;
+              const dy = t.clientY - o.y;
+              if (Math.abs(dy) < 42 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
+              if (dy < 0) {
+                focusPlayCard(true);
+              } else {
+                controllerRef.current?.pause(true);
+              }
+            }}
+          >
             <div className={`console-target${hud.targetWord ? ' has-target' : ''}`}>
               {targetCleanKey > 0 && (
                 <span key={targetCleanKey} className="target-sweep" aria-hidden="true" />
@@ -860,17 +910,31 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
               ))}
             </div>
 
-            <button
-              className="tool console-key"
-              type="button"
-              onClick={e => {
-                if (!hud.running) startGame();
-                focusPlayCard(true);
-                e.currentTarget.blur();
-              }}
-            >
-              ⌨ TYPE
-            </button>
+            <div className="console-actions">
+              <button
+                className="tool console-pause-btn"
+                type="button"
+                title="Pause game"
+                aria-label="Pause game"
+                onClick={e => {
+                  controllerRef.current?.pause(true);
+                  e.currentTarget.blur();
+                }}
+              >
+                Ⅱ
+              </button>
+              <button
+                className="tool console-key"
+                type="button"
+                onClick={e => {
+                  if (!hud.running) startGame();
+                  focusPlayCard(true);
+                  e.currentTarget.blur();
+                }}
+              >
+                ⌨ TYPE
+              </button>
+            </div>
 
             <input
               ref={mobileInputRef}

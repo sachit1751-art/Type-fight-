@@ -27,7 +27,7 @@ export const HudBar: React.FC<HudBarProps> = ({ hud, streakPop }) => {
           </div>
           <b className="mono">{hud.hp}</b>
         </div>
-        <span className={`shield-status mono${hud.shieldActive ? ' on' : ''}`}>
+        <span key={`sh-${hud.shieldActive}`} className={`shield-status mono${hud.shieldActive ? ' on hud-pop' : ''}`}>
           {hud.shieldActive
             ? 'SHIELD UP · falls on a typo'
             : `◇ SHIELD OFF · clean words ${Math.min(hud.cleanWords, 2)}/2`}
@@ -41,12 +41,16 @@ export const HudBar: React.FC<HudBarProps> = ({ hud, streakPop }) => {
 
       <div className="hud-cell">
         <span className="cap">Wave</span>
-        <b className="mono hud-num">{hud.mode === 'menu' ? '—' : hud.wave}</b>
+        <b key={`w-${hud.wave}`} className="mono hud-num hud-pop">
+          {hud.mode === 'menu' ? '—' : hud.wave}
+        </b>
       </div>
 
       <div className="hud-cell">
         <span className="cap">Down</span>
-        <b className="mono hud-num">{hud.kills}</b>
+        <b key={`k-${hud.kills}`} className="mono hud-num hud-pop">
+          {hud.kills}
+        </b>
       </div>
 
       <div className="hud-cell">

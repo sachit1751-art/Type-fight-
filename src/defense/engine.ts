@@ -40,7 +40,16 @@ import {
   tween,
   Tween,
 } from './kernel';
-import { DEFENSE_LINES, DEFENSE_LONG, DEFENSE_MID, DEFENSE_SHORT, pickDefense, randDefense } from './words';
+import {
+  DEFENSE_ELITE,
+  DEFENSE_LINES,
+  DEFENSE_LINES_HARD,
+  DEFENSE_LONG,
+  DEFENSE_MID,
+  DEFENSE_SHORT,
+  pickDefense,
+  randDefense,
+} from './words';
 
 const VW = 960;
 const VH = 430;
@@ -1102,20 +1111,41 @@ export class TypingDefenseController {
   }
 
   private chooseWord(type: WalkerKind, w: number): string {
-    const pool =
-      type === 'herald'
-        ? DEFENSE_LINES
-        : type === 'runner'
-          ? DEFENSE_SHORT
-          : type === 'brute'
-            ? w >= 4
-              ? DEFENSE_LONG
-              : DEFENSE_MID
-            : w <= 2
-              ? DEFENSE_SHORT.concat(DEFENSE_MID.filter(m => m.length <= 6))
-              : w <= 5
-                ? DEFENSE_MID
-                : DEFENSE_MID.concat(DEFENSE_LONG);
+    let pool: string[];
+    if (w >= 9) {
+      pool =
+        type === 'herald'
+          ? DEFENSE_LINES_HARD
+          : type === 'runner'
+            ? DEFENSE_LONG
+            : DEFENSE_ELITE;
+    } else if (w >= 6) {
+      pool =
+        type === 'herald'
+          ? DEFENSE_LINES_HARD
+          : type === 'runner'
+            ? DEFENSE_MID.filter(m => m.length >= 6).concat(DEFENSE_LONG.slice(0, 12))
+            : type === 'brute'
+              ? DEFENSE_ELITE
+              : DEFENSE_LONG.concat(DEFENSE_ELITE.slice(0, 14));
+    } else {
+      pool =
+        type === 'herald'
+          ? DEFENSE_LINES
+          : type === 'runner'
+            ? w >= 5
+              ? DEFENSE_MID.filter(m => m.length <= 7)
+              : DEFENSE_SHORT
+            : type === 'brute'
+              ? w >= 4
+                ? DEFENSE_LONG
+                : DEFENSE_MID
+              : w <= 2
+                ? DEFENSE_SHORT.concat(DEFENSE_MID.filter(m => m.length <= 6))
+                : w <= 4
+                  ? DEFENSE_MID
+                  : DEFENSE_MID.concat(DEFENSE_LONG);
+    }
     const used = new Set(this.G.enemies.filter(e => !e.dying).map(e => e.word[0]));
     for (let i = 0; i < 40; i++) {
       const wd = pickDefense(pool);
@@ -1268,11 +1298,12 @@ export class TypingDefenseController {
 
   private startWave(w: number): void {
     this.G.wave = w;
-    this.G.toSpawn = Math.min(30, 5 + 2 * w);
+    const overWave = Math.max(0, w - 5);
+    this.G.toSpawn = w <= 5 ? 5 + 2 * w : Math.min(54, 15 + overWave * 6);
     const spawnMul = this.G.challenge?.spawnMul ?? 1;
     const chSpeedMul = this.G.challenge?.enemySpeedMul ?? 1;
-    this.G.interval = Math.max(0.7, (2.6 - 0.16 * (w - 1)) * spawnMul);
-    this.G.speedMul = (1 + 0.055 * (w - 1)) * chSpeedMul;
+    this.G.interval = Math.max(0.32, (2.6 - 0.16 * (w - 1) - overWave * 0.14) * spawnMul);
+    this.G.speedMul = (1 + 0.055 * (w - 1) + Math.pow(overWave, 1.35) * 0.14) * chSpeedMul;
     this.G.spawnT = 0.4;
     this.G.inter = 0;
     this.cb.onBanner(
@@ -1455,7 +1486,15 @@ export class TypingDefenseController {
             this.G.spawnT -= dt;
             if (this.G.spawnT <= 0 && this.spawn()) {
               this.G.toSpawn--;
-              this.G.spawnT = this.G.interval * randDefense(0.75, 1.25);
+              if (
+                this.G.wave >= 7 &&
+                this.G.toSpawn > 0 &&
+                Math.random() < Math.min(0.65, (this.G.wave - 6) * 0.16) &&
+                this.spawn()
+              ) {
+                this.G.toSpawn--;
+              }
+              this.G.spawnT = this.G.interval * randDefense(0.75, 1.2);
             }
           } else if (!this.G.enemies.length) {
             this.waveClear();
@@ -1466,6 +1505,7 @@ export class TypingDefenseController {
       const byLane: EnemyEntity[][] = [[], [], []];
       this.G.enemies.forEach(e => byLane[e.lane].push(e));
       byLane.forEach(l => l.sort((a, b) => a.x - b.x));
+      const wallOverWave = Math.max(0, this.G.wave - 5);
       for (const l of byLane) {
         l.forEach((e, i) => {
           if (e.dieAt && this.G.t > e.dieAt) {
@@ -1485,10 +1525,11 @@ export class TypingDefenseController {
           if (!this.tutorialMode && !e.dying && e.x <= STOP_X + 0.5) {
             e.atk -= dt;
             if (e.atk <= 0) {
-              e.atk = e.T.atk;
+              e.atk = Math.max(0.45, e.T.atk - wallOverWave * 0.12);
               SFX.eshoot();
+              const wallDmg = e.T.dmg + Math.floor(Math.max(0, this.G.wave - 6) * 2);
               this.bolt(this.headOf(e), [KX + 8, KY, 60], 0.5, 18, 'dot m', 3, () =>
-                this.damage(e.T.dmg)
+                this.damage(wallDmg)
               );
             }
           }
