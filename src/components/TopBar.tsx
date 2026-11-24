@@ -24,6 +24,9 @@ interface TopBarProps {
   onRestart: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
+const isNarrowViewport = () =>
+  typeof window !== 'undefined' && window.innerWidth <= 720;
+
 export const TopBar: React.FC<TopBarProps> = ({
   activeView,
   canPause,
@@ -45,11 +48,28 @@ export const TopBar: React.FC<TopBarProps> = ({
   onTogglePause,
   onRestart,
 }) => {
-  const [mobileCollapsed, setMobileCollapsed] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(isNarrowViewport);
+  const [mobileCollapsed, setMobileCollapsed] = useState<boolean>(isNarrowViewport);
   const lastScrollYRef = useRef<number>(0);
 
   useEffect(() => {
-    setMobileCollapsed(false);
+    const mq = window.matchMedia('(max-width: 720px)');
+    const sync = () => {
+      const mobile = mq.matches;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileCollapsed(false);
+      } else {
+        setMobileCollapsed(true);
+      }
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    setMobileCollapsed(isNarrowViewport());
     lastScrollYRef.current = typeof window !== 'undefined' ? window.scrollY : 0;
   }, [activeView]);
 
@@ -62,14 +82,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   useEffect(() => {
     lastScrollYRef.current = typeof window !== 'undefined' ? window.scrollY : 0;
     const onScroll = () => {
+      if (!isNarrowViewport()) return;
       const y = window.scrollY;
       const prev = lastScrollYRef.current;
-      if (y <= 12) {
-        setMobileCollapsed(false);
-      } else if (y > 24 && y > prev + 4) {
+      if (y > 24 && y > prev + 6) {
         setMobileCollapsed(true);
-      } else if (y < prev - 16) {
-        setMobileCollapsed(false);
       }
       lastScrollYRef.current = y;
     };
@@ -84,8 +101,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         ? 'TYPE ARCADE'
         : 'TYPING ARCADE';
 
+  const navCollapsed = isMobile && mobileCollapsed;
+
   return (
-    <header className={`topbar${mobileCollapsed ? ' mobile-collapsed' : ''}`}>
+    <header className={`topbar${navCollapsed ? ' mobile-collapsed' : ''}`}>
       <div className="topbar-row">
         <a
           className="brand"
@@ -101,7 +120,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <path d="M14 15v11M14 19l10-3 8 1M14 26l-6 10M14 26l7 9M24 16l14-2M34 12v4M38 14h4" />
           </svg>
           <span className="brand-word">HAIRLINE</span>
-          <span className="brand-sep">/</span>
+          <span className="brand-sep" aria-hidden="true">/</span>
           <span className="brand-sub">{brandSub}</span>
         </a>
 
@@ -134,28 +153,30 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             type="button"
             className="tool mobile-ctrl-btn"
-            aria-expanded={!mobileCollapsed}
+            aria-expanded={!navCollapsed}
             aria-controls="topControlsNav"
             onClick={e => {
               setMobileCollapsed(c => !c);
               e.currentTarget.blur();
             }}
           >
-            {mobileCollapsed ? '⚙ CONTROLS ▾' : '▴ HIDE'}
+            {navCollapsed ? '⚙ MENU' : '✕ HIDE'}
           </button>
         </div>
       </div>
 
       <nav
         id="topControlsNav"
-        className={`top-actions${mobileCollapsed ? ' is-collapsed' : ''}`}
+        className={`top-actions${navCollapsed ? ' is-collapsed' : ''}`}
         aria-label="Game controls"
+        aria-hidden={navCollapsed}
       >
         <div className="top-actions-inner">
           <button
             id="btnTutorial"
             className="tool"
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title="Interactive game guide"
             onClick={e => {
               onOpenTutorial();
@@ -169,6 +190,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btnHelp"
             className="tool tool-help"
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title="Instructions & help"
             aria-haspopup="dialog"
             aria-expanded={helpOpen}
@@ -180,6 +202,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btnSound"
             className={`tool${soundOn ? '' : ' off'}`}
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title={soundOn ? 'Sound is ON — click to mute' : 'Sound is OFF — click to play sound'}
             aria-pressed={soundOn}
             onClick={onToggleSound}
@@ -191,6 +214,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btnAudioSettings"
             className="tool"
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title="Audio mixer & Fast Restart settings"
             aria-haspopup="dialog"
             aria-expanded={audioOpen}
@@ -202,6 +226,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btnTheme"
             className="tool"
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-pressed={darkMode}
             onClick={onToggleTheme}
@@ -212,6 +237,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btnPause"
             className="tool"
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title="Pause (Esc)"
             disabled={!canPause}
             onClick={onTogglePause}
@@ -222,6 +248,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btnRestart"
             className="tool"
             type="button"
+            tabIndex={navCollapsed ? -1 : undefined}
             title="Restart run"
             disabled={!canRestart}
             onClick={onRestart}

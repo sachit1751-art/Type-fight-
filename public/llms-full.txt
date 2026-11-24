@@ -1,0 +1,57 @@
+# HAIRLINE — Type Arcade & Typing Defense (Games by Sachit) — Full Agent Reference
+
+> Canonical URL: https://type-fg.sachit1751.workers.dev/
+> OpenGraph Image: https://type-fg.sachit1751.workers.dev/og-image.jpg
+> Author: Sachit
+> Deployment: Cloudflare Workers static assets (`./dist`, SPA fallback)
+
+## 1. Purpose & Design Language
+HAIRLINE is a dual browser typing-game suite crafted in a minimalist monochrome architectural hairline aesthetic with Light Plate (`#ffffff`) and Dark Plate (`#08090a`) themes, optional 24px drafting grid, procedural Web Audio SFX, and D3.js post-run WPM analytics.
+
+## 2. Navigation & First-Launch Flow
+- **Home Landing (`HomeLanding`)**: Centered under "Games by Sachit" with two game cards: **Type Arcade** (`PLAY TYPE ARCADE` / `Daily: ...`) and **Typing Defence** (`PLAY TYPING DEFENCE` / `Daily: ...`). Includes corner theme switcher (`DARK PLATE` / `LIGHT PLATE`) and `SETTINGS` drawer trigger, plus a 4-cell Lifetime Records strip (`All-Time Fastest WPM`, `Lifetime Best Accuracy`, `Last Score`, `Daily Challenge`).
+- **Interactive Onboarding (`OnboardingModal`)**: Automatically launches on a user's first entry into a game (`tutorialsCompleted` tracked per game in `localStorage`).
+  - Type Arcade Tour: Interactive 960x420 mini-canvas (`aim`, `hit`, `fire`) demonstrating 1:1 letter shooting and shield deflection.
+  - Typing Defence Tour: Interactive 3D-projected isometric keep board teaching Keep firing (`keep`) and lane turret placement (`1` then `2`).
+  - `SKIP TO GAME →` jumps directly to the game's start screen.
+- **In-Game Chrome (`TopBar` & Desktop Workspace Tabs / Mobile Dock)**:
+  - Controls: `⌂ HOME`, `◈ TOUR`, `? HELP`, `♪ SOUND: ON/OFF`, `⚙ AUDIO`, `☀ LIGHT MODE / ☾ DARK MODE`, `Ⅱ PAUSE / ▶ RESUME`, `↻ RESTART`.
+  - Mobile behavior (`<= 720px`): Header controls start collapsed, header is non-sticky so it never occludes gameplay, and the bottom thumb dock hides automatically during active play or when the soft keyboard is open.
+
+## 3. Game 1: Type Arcade (Side-Scrolling Typing Shooter)
+- **Canvas**: `960×420` HiDPI 2D canvas.
+- **Controls**:
+  - `A–Z` and `Space`: Pure 1:1 positional typing. Zero Backspace. Zero automatic letter skipping.
+  - At the start of a word (`progress === 0`), typing another active enemy's starting letter switches lock to that enemy.
+  - `Enter`: Start from menu or restart on Game Over.
+  - `Esc`: Pause / Resume or close open drawers.
+- **Rules & Scoring**:
+  - Every accurate letter fires a rifle bullet (`+10` base points multiplied by streak multiplier `1 + floor(streak / 12)` and Daily Challenge multiplier).
+  - Typo (`ch !== expected`): Marks character red, resets streak, drops active shield, advances cursor by 1, and triggers enemy return fire (`-8 HP` standard).
+  - Clean Word (zero typos): Heals `+2 HP` (standard); **2 clean words in a row** activate a persistent Hero **Shield** that blocks incoming enemy fire until the next typo.
+  - Enemy reaching `THE LINE` stops and fires periodically.
+  - New wave every 8 kills; Wave 3+ (or `75s`) unlocks multi-word `— LINE —` phrases where `Space` counts.
+
+## 4. Game 2: Typing Defence (Isometric 3-Lane Turret Defense)
+- **Stage**: `960×430` 3D-projected isometric SVG keep with 3 lanes, 3 turret pads, and floating word bubbles.
+- **Controls**:
+  - `A–Z` and `Space`: Lock on and fire bolts from the Keep (`+1 Ink` per correct letter).
+  - `1`, `2`, `3` (or on-screen keybar/pad buttons): Build or upgrade Lane 1–3 turrets (`25 / 45 / 70 Ink` for Levels `1 / 2 / 3`; reach `240 / 330 / 420`). Turrets chip trailing letters off approaching enemies in their lane.
+  - `Enter`: Start / Restart; `Esc`: Pause / Resume.
+- **Combo Multiplier & Shield**:
+  - Rapid consecutive kills without missing build the **Ink Combo Multiplier** (HUD indicator with decay gauge, granting up to `×4` Ink currency on kills).
+  - Clean word heals `+2 HP` and `+3 Ink`; 2 clean words raise a 3-hit Keep shield.
+
+## 5. Daily Rotating Challenge
+Deterministic local-date rotation across presets (`Overdrive Twin-Bolt`, `Precision Railgun`, `Blitz Scattergun`, `Glass Cannon Hyper`, `Iron Keep Siege`, `Velocity Rail Sprint`) modifying speed, HP/Ink, typo damage, and score multipliers. In Type Arcade, Daily weapons grant bonus score and enemy knockback shockwaves without skipping any typed letters.
+
+## 6. Post-Run Analytics, Ranks & Persistence
+- **D3 WPM Chart (`WpmTrendChart`)**: Samples WPM every `1.5s`, plots area + curve, peak dot, and average reference line.
+- **Arcade Ranks**: Deterministic post-run grade (`S+`, `S`, `A`, `B`, `C`) with `NEW` record tags.
+- **Sharing**: Web Share / Twitter / Facebook links and 1080×1080 PNG export card (`shareCard.ts`).
+- **Local Persistence (`localStorage`)**:
+  - `hairline-player-history-v1`: `allTimeFastestWpm`, `lifetimeBestAccuracy`, `lastPlayedGame`, per-game `bestScore`, `lastScore`, `bestWpm`, `bestAccuracy`, `runsPlayed`.
+  - `hairline-daily-challenges-v1`: Daily streak and best scores by `YYYY-MM-DD`.
+  - `hairline-user-prefs-v1`: `fastRestart`, `draftingGrid`, `tutorialsCompleted`.
+  - `hairline-audio-settings-v1`: `enabled`, `masterVolume`, category toggles (`shooting`, `enemies`, `ui`).
+  - `hairline-type-defense-theme`: `'light' | 'dark'`.

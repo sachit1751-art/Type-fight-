@@ -13,6 +13,7 @@ import {
 import {
   getPreferences,
   resetPreferences,
+  setDraftingGrid,
   setFastRestart,
   subscribePreferences,
   UserPreferences,
@@ -201,10 +202,33 @@ export const AudioSettingsDrawer: React.FC<AudioSettingsDrawerProps> = ({
             </div>
           </section>
 
-          {/* Gameplay Flow Controls */}
+          {/* Gameplay & Display Controls */}
           <section className="audio-section">
-            <span className="cap">Gameplay Controls</span>
+            <span className="cap">Gameplay &amp; Display</span>
             <div className="audio-cat-list">
+              <div className="audio-cat-item">
+                <div className="audio-cat-copy">
+                  <strong>Architectural Drafting Grid</strong>
+                  <span>
+                    Subtle hairline paper grid across the workspace and arenas for crisp drafting-board
+                    depth.
+                  </span>
+                </div>
+                <div className="audio-cat-controls">
+                  <button
+                    id="toggleDraftingGrid"
+                    type="button"
+                    role="switch"
+                    aria-checked={prefs.draftingGrid}
+                    aria-label="Toggle Architectural Drafting Grid"
+                    className={`audio-switch mono${prefs.draftingGrid ? ' on' : ''}`}
+                    onClick={() => setDraftingGrid(!prefs.draftingGrid)}
+                  >
+                    {prefs.draftingGrid ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+
               <div className="audio-cat-item">
                 <div className="audio-cat-copy">
                   <strong>Fast Restart on Game Over</strong>

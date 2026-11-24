@@ -1,0 +1,18 @@
+{
+  "name": "HAIRLINE — Type Arcade & Typing Defense",
+  "short_name": "HAIRLINE",
+  "description": "Two minimalist hairline-illustrated typing games by Sachit: Type Arcade and Typing Defense with live D3 WPM trend analytics.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1b1b1f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

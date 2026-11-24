@@ -1,5 +1,6 @@
 export interface UserPreferences {
   fastRestart: boolean;
+  draftingGrid: boolean;
   tutorialsCompleted: {
     arcade: boolean;
     defense: boolean;
@@ -10,6 +11,7 @@ const PREFS_KEY = 'hairline-preferences-v1';
 
 const DEFAULT_PREFS: UserPreferences = {
   fastRestart: false,
+  draftingGrid: true,
   tutorialsCompleted: {
     arcade: false,
     defense: false,
@@ -23,6 +25,7 @@ function loadInitialPreferences(): UserPreferences {
       const parsed = JSON.parse(raw) as Partial<UserPreferences>;
       return {
         fastRestart: typeof parsed.fastRestart === 'boolean' ? parsed.fastRestart : false,
+        draftingGrid: typeof parsed.draftingGrid === 'boolean' ? parsed.draftingGrid : true,
         tutorialsCompleted: {
           arcade: Boolean(parsed.tutorialsCompleted?.arcade),
           defense: Boolean(parsed.tutorialsCompleted?.defense),
@@ -34,6 +37,7 @@ function loadInitialPreferences(): UserPreferences {
   }
   return {
     fastRestart: DEFAULT_PREFS.fastRestart,
+    draftingGrid: DEFAULT_PREFS.draftingGrid,
     tutorialsCompleted: { ...DEFAULT_PREFS.tutorialsCompleted },
   };
 }
@@ -44,6 +48,7 @@ const listeners = new Set<(p: UserPreferences) => void>();
 function clonePrefs(p: UserPreferences): UserPreferences {
   return {
     fastRestart: p.fastRestart,
+    draftingGrid: p.draftingGrid,
     tutorialsCompleted: { ...p.tutorialsCompleted },
   };
 }
@@ -71,6 +76,15 @@ export function setFastRestart(enabled: boolean): void {
   prefs = {
     ...prefs,
     fastRestart: enabled,
+    tutorialsCompleted: { ...prefs.tutorialsCompleted },
+  };
+  notify();
+}
+
+export function setDraftingGrid(enabled: boolean): void {
+  prefs = {
+    ...prefs,
+    draftingGrid: enabled,
     tutorialsCompleted: { ...prefs.tutorialsCompleted },
   };
   notify();

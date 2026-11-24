@@ -9,6 +9,7 @@ import React, {
 import { DefenseHudSnapshot, TypingDefenseController } from '../defense/engine';
 import { DailyChallenge, PlayVariant } from '../game/challenge';
 import { PlayerHistory } from '../game/history';
+import { computeArcadeRank } from '../game/rank';
 import { buildDefenseShareText, renderDefenseShareCardPng } from '../game/shareCard';
 import { MenuKeepFigure } from './MenuKeepFigure';
 import { SocialShareBar } from './SocialShareBar';
@@ -70,6 +71,7 @@ const INITIAL_HUD: DefenseHudSnapshot = {
   ],
   padTags: [],
   wpmHistory: [{ t: 0, wpm: 0 }],
+  lastRunRecords: null,
 };
 
 function renderFeedTokens(text: string): React.ReactNode {
@@ -106,6 +108,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
     },
     ref
   ) => {
+    const stageWrapRef = useRef<HTMLElement | null>(null);
     const fieldRef = useRef<HTMLDivElement | null>(null);
     const boardRef = useRef<HTMLDivElement | null>(null);
     const labelsRef = useRef<HTMLDivElement | null>(null);
@@ -113,6 +116,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
     const controllerRef = useRef<TypingDefenseController | null>(null);
 
     const [hud, setHud] = useState<DefenseHudSnapshot>(INITIAL_HUD);
+    const [mobileLive, setMobileLive] = useState<boolean>(false);
     const [feed, setFeed] = useState<string>(
       'type the first letter of any word to lock on — <b>1 · 2 · 3</b> build turrets'
     );
@@ -120,8 +124,12 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
     const [shaking, setShaking] = useState<boolean>(false);
     const [inkBump, setInkBump] = useState<boolean>(false);
     const [comboBump, setComboBump] = useState<boolean>(false);
+    const [targetTypoKey, setTargetTypoKey] = useState<number>(0);
+    const [targetCleanKey, setTargetCleanKey] = useState<number>(0);
     const prevInkRef = useRef<number>(25);
     const prevComboRef = useRef<number>(0);
+    const prevWrongMarksRef = useRef<number>(0);
+    const prevKillsRef = useRef<number>(0);
     const prevOverRef = useRef<boolean>(false);
     const helpPausedRef = useRef<boolean>(false);
     const prevHelpRef = useRef<boolean>(false);
@@ -165,6 +173,15 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
               window.requestAnimationFrame(() => setComboBump(true));
             }
           }
+          const wrongCount = snap.targetMarks.filter(m => m === 'bad').length;
+          if (wrongCount > prevWrongMarksRef.current) {
+            setTargetTypoKey(k => k + 1);
+          }
+          prevWrongMarksRef.current = wrongCount;
+          if (snap.kills > prevKillsRef.current) {
+            setTargetCleanKey(k => k + 1);
+          }
+          prevKillsRef.current = snap.kills;
           onStateSyncRef.current({
             running: snap.running,
             paused: snap.paused,
@@ -244,10 +261,32 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
       prevTutorialRef.current = tutorialOpen;
     }, [tutorialOpen, hud.paused, hud.running]);
 
+    const focusPlayCard = useCallback((openKeyboard = false) => {
+      if (window.innerWidth <= 720) {
+        window.requestAnimationFrame(() => {
+          stageWrapRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          if (openKeyboard) {
+            setMobileLive(true);
+            mobileInputRef.current?.focus({ preventScroll: true });
+          }
+        });
+      } else if (openKeyboard) {
+        setMobileLive(true);
+        window.requestAnimationFrame(() => {
+          mobileInputRef.current?.focus({ preventScroll: true });
+        });
+      }
+    }, []);
+
     const startGame = useCallback(() => {
       prevOverRef.current = false;
+      prevWrongMarksRef.current = 0;
+      prevKillsRef.current = 0;
+      setTargetTypoKey(0);
+      setTargetCleanKey(0);
       controllerRef.current?.start(variantRef.current, dailyRef.current);
-    }, []);
+      focusPlayCard(false);
+    }, [focusPlayCard]);
 
     const togglePause = useCallback(() => {
       controllerRef.current?.pause();
@@ -507,7 +546,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
         </section>
 
         {/* Isometric Keep & Three Lanes Stage */}
-        <section className="stage-wrap">
+        <section ref={stageWrapRef} className="stage-wrap" aria-label="Typing Defence arena card">
           <div className="stage-head">
             <span className="cap">
               {hud.running && hud.variant === 'daily' && hud.challengeName
@@ -520,6 +559,17 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
           <div
             ref={fieldRef}
             className={`td-field${shaking ? ' shake' : ''}`}
+            onClick={e => {
+              if (
+                hud.running &&
+                !hud.paused &&
+                !hud.over &&
+                window.innerWidth <= 860 &&
+                (e.target === e.currentTarget || Boolean(boardRef.current?.contains(e.target as Node)))
+              ) {
+                focusPlayCard(true);
+              }
+            }}
           >
             <div
               ref={boardRef}
@@ -648,91 +698,128 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
                 </div>
               )}
 
-              {hud.over && (
-                <div className="overlay-card over-wide">
-                  <p className="cap accent-cap">The keep has fallen</p>
-                  <h2>GAME OVER</h2>
-                  <div className="final-stats">
-                    <div>
-                      <span className="cap">Session Score</span>
-                      <b>{hud.score.toLocaleString()}</b>
+              {hud.over && (() => {
+                const rank = computeArcadeRank({
+                  wpm: hud.wpm,
+                  acc: hud.acc,
+                  wave: hud.wave,
+                  kills: hud.kills,
+                });
+                const rec = hud.lastRunRecords;
+                return (
+                  <div className="overlay-card over-wide">
+                    <p className="cap accent-cap">The keep has fallen</p>
+                    <h2>GAME OVER</h2>
+
+                    <div className={`rank-banner${rank.isTopTier ? ' top' : ''}`} aria-label={`Run rank ${rank.grade}, ${rank.title}`}>
+                      <span className="rank-grade mono">{rank.grade}</span>
+                      <div className="rank-copy">
+                        <strong>{rank.title}</strong>
+                        <span className="mono">{rank.note}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="cap">Session Accuracy</span>
-                      <b>{hud.acc}%</b>
+
+                    <div className="final-stats">
+                      <div>
+                        <span className="cap">
+                          Session Score{' '}
+                          {rec?.isNewBestScore && <em className="new-rec-tag">NEW</em>}
+                        </span>
+                        <b>{hud.score.toLocaleString()}</b>
+                      </div>
+                      <div>
+                        <span className="cap">Session Accuracy</span>
+                        <b>{hud.acc}%</b>
+                      </div>
+                      <div>
+                        <span className="cap">
+                          Lifetime Best Acc{' '}
+                          {rec?.isNewLifetimeAcc && <em className="new-rec-tag">NEW</em>}
+                        </span>
+                        <b>{Math.max(playerHistory.lifetimeBestAccuracy, hud.acc)}%</b>
+                      </div>
+                      <div>
+                        <span className="cap">Wave &amp; Walkers</span>
+                        <b>
+                          W{hud.wave} · {hud.kills} down
+                        </b>
+                      </div>
+                      <div>
+                        <span className="cap">
+                          Speed{' '}
+                          {rec?.isNewFastestWpm && <em className="new-rec-tag">NEW</em>}
+                        </span>
+                        <b>{hud.wpm} wpm</b>
+                      </div>
+                      <div>
+                        <span className="cap">Best Score</span>
+                        <b>{Math.max(hud.bestScore, playerHistory.defense.bestScore).toLocaleString()}</b>
+                      </div>
                     </div>
-                    <div>
-                      <span className="cap">Lifetime Best Acc</span>
-                      <b>{Math.max(playerHistory.lifetimeBestAccuracy, hud.acc)}%</b>
-                    </div>
-                    <div>
-                      <span className="cap">Wave &amp; Walkers</span>
-                      <b>
-                        W{hud.wave} · {hud.kills} down
-                      </b>
-                    </div>
-                    <div>
-                      <span className="cap">Speed</span>
-                      <b>{hud.wpm} wpm</b>
-                    </div>
-                    <div>
-                      <span className="cap">Best Score</span>
-                      <b>{Math.max(hud.bestScore, playerHistory.defense.bestScore).toLocaleString()}</b>
+
+                    <WpmTrendChart samples={hud.wpmHistory} finalWpm={hud.wpm} />
+
+                    <SocialShareBar
+                      compact
+                      shareText={buildDefenseShareText(hud)}
+                      cardFilename={`hairline-defense-wave-${hud.wave}.png`}
+                      renderCardPng={() => renderDefenseShareCardPng(hud, darkMode)}
+                    />
+
+                    <div className="over-actions">
+                      <button
+                        className="cta"
+                        type="button"
+                        onClick={e => {
+                          startGame();
+                          e.currentTarget.blur();
+                        }}
+                      >
+                        ↻ &nbsp;PLAY AGAIN
+                      </button>
+                      <p className="fine">
+                        {fastRestart ? (
+                          <>
+                            Fast Restart ON — type <kbd>A–Z</kbd> to jump back in, or{' '}
+                            <kbd>Enter</kbd>
+                          </>
+                        ) : (
+                          <>
+                            <kbd>Enter</kbd> also restarts
+                          </>
+                        )}
+                      </p>
                     </div>
                   </div>
-
-                  <WpmTrendChart samples={hud.wpmHistory} finalWpm={hud.wpm} />
-
-                  <SocialShareBar
-                    compact
-                    shareText={buildDefenseShareText(hud)}
-                    cardFilename={`hairline-defense-wave-${hud.wave}.png`}
-                    renderCardPng={() => renderDefenseShareCardPng(hud, darkMode)}
-                  />
-
-                  <div className="over-actions">
-                    <button
-                      className="cta"
-                      type="button"
-                      onClick={e => {
-                        startGame();
-                        e.currentTarget.blur();
-                      }}
-                    >
-                      ↻ &nbsp;PLAY AGAIN
-                    </button>
-                    <p className="fine">
-                      {fastRestart ? (
-                        <>
-                          Fast Restart ON — type <kbd>A–Z</kbd> to jump back in, or{' '}
-                          <kbd>Enter</kbd>
-                        </>
-                      ) : (
-                        <>
-                          <kbd>Enter</kbd> also restarts
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
 
           {/* ── TYPING CONSOLE & LANE TURRET BUILDERS ── */}
           <div className="console">
-            <div className="console-target">
+            <div className={`console-target${hud.targetWord ? ' has-target' : ''}`}>
+              {targetCleanKey > 0 && (
+                <span key={targetCleanKey} className="target-sweep" aria-hidden="true" />
+              )}
               <span className="cap">Target</span>
-              <div className="target-word mono td-target" aria-live="polite">
+              <div
+                key={`typo-${targetTypoKey}`}
+                className={`target-word mono td-target${
+                  targetTypoKey > 0 ? ' target-typo-nudge' : ''
+                }`}
+                aria-live="polite"
+              >
                 {hud.targetWord ? (
                   [...hud.targetWord].map((c, i) => {
                     const m = hud.targetMarks[i];
                     const ch = c === ' ' ? '␣' : c;
+                    const justHit = i === hud.targetPos - 1;
                     const cls =
                       m === 'ok'
-                        ? 'done'
+                        ? `done${justHit ? ' char-pop' : ''}`
                         : m === 'bad'
-                          ? 'wronged'
+                          ? `wronged${justHit ? ' char-pop' : ''}`
                           : m === 'cut'
                             ? 'cut'
                             : i === hud.targetPos
@@ -778,9 +865,7 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
               type="button"
               onClick={e => {
                 if (!hud.running) startGame();
-                window.requestAnimationFrame(() => {
-                  mobileInputRef.current?.focus({ preventScroll: true });
-                });
+                focusPlayCard(true);
                 e.currentTarget.blur();
               }}
             >
@@ -789,13 +874,14 @@ export const TypingDefenseView = forwardRef<TypingDefenseHandle, TypingDefenseVi
 
             <input
               ref={mobileInputRef}
-              className="mobile-input"
+              className={`mobile-input${mobileLive ? ' live' : ''}`}
               type="text"
               autoComplete="off"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
               aria-label="Type here"
+              onBlur={() => setMobileLive(false)}
               onChange={handleMobileInput}
             />
           </div>

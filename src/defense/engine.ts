@@ -1,6 +1,7 @@
 import { ensureAudio, SFX } from '../game/audio';
 import { DailyChallenge, PlayVariant, recordDailyRun, WeaponType } from '../game/challenge';
 import { recordRunHistory } from '../game/history';
+import { RunRecordFlags } from '../game/rank';
 import { WpmPoint } from '../game/types';
 import {
   Cam,
@@ -162,6 +163,7 @@ export interface DefenseHudSnapshot {
   }>;
   padTags: Array<{ xPct: number; yPct: number; cost: number; max: boolean; can: boolean }>;
   wpmHistory: WpmPoint[];
+  lastRunRecords: RunRecordFlags | null;
 }
 
 export interface DefenseCallbacks {
@@ -281,6 +283,7 @@ export class TypingDefenseController {
   private fontU = 13;
   private wpmSampleT = 1.5;
   private tutorialMode = false;
+  private lastRunRecords: RunRecordFlags | null = null;
 
   constructor(
     boardEl: HTMLElement,
@@ -632,6 +635,7 @@ export class TypingDefenseController {
         };
       }),
       wpmHistory: [...this.G.wpmHistory],
+      lastRunRecords: this.lastRunRecords,
     };
   }
 
@@ -684,6 +688,7 @@ export class TypingDefenseController {
     challenge: DailyChallenge | null = null
   ): void {
     this.tutorialMode = false;
+    this.lastRunRecords = null;
     this.clearField();
     this.G = this.freshState(variant, challenge);
     this.target = null;
@@ -1016,12 +1021,17 @@ export class TypingDefenseController {
     const acc = tot ? Math.round((this.G.correct / tot) * 100) : 100;
     const finalWpm = this.currentWpm();
 
-    recordRunHistory('defense', {
+    const res = recordRunHistory('defense', {
       score: this.G.score,
       accuracy: acc,
       wpm: finalWpm,
       wave: this.G.wave,
     });
+    this.lastRunRecords = {
+      isNewBestScore: res.isNewBestScore,
+      isNewFastestWpm: res.isNewFastestWpm,
+      isNewLifetimeAcc: res.isNewLifetimeAcc,
+    };
 
     if (this.G.variant === 'daily' && this.G.challenge) {
       recordDailyRun('defense', this.G.challenge.dateKey, this.G.score, this.G.wave, this.G.kills);

@@ -48,11 +48,13 @@ import {
   W,
 } from './game/engine';
 import { buildArcadeShareText, renderArcadeShareCardPng } from './game/shareCard';
+import { computeArcadeRank, RunRecordFlags } from './game/rank';
 import { GameState, HudSnapshot } from './game/types';
 
 const THEME_KEY = 'hairline-type-defense-theme';
 
 export default function App() {
+  const stageWrapRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mobileInputRef = useRef<HTMLInputElement | null>(null);
   const helpBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -103,8 +105,15 @@ export default function App() {
 
   const [soundOn, setSoundOn] = useState<boolean>(() => getAudioSettings().enabled);
   const [fastRestart, setFastRestartState] = useState<boolean>(() => getPreferences().fastRestart);
+  const [draftingGrid, setDraftingGridState] = useState<boolean>(() => getPreferences().draftingGrid);
   const fastRestartRef = useRef(fastRestart);
   fastRestartRef.current = fastRestart;
+
+  const [arcadeRunRecords, setArcadeRunRecords] = useState<RunRecordFlags | null>(null);
+  const [targetTypoKey, setTargetTypoKey] = useState<number>(0);
+  const [targetCleanKey, setTargetCleanKey] = useState<number>(0);
+  const prevArcadeWrongRef = useRef<number>(0);
+  const prevArcadeKillsRef = useRef<number>(0);
 
   const [helpOpen, setHelpOpen] = useState<boolean>(false);
   const helpOpenRef = useRef(helpOpen);
@@ -150,6 +159,10 @@ export default function App() {
     }
   }, [darkMode]);
 
+  useEffect(() => {
+    document.body.classList.toggle('drafting-grid', draftingGrid);
+  }, [draftingGrid]);
+
   /* Keep TopBar sound indicator synchronized with AudioSettingsDrawer */
   useEffect(() => {
     return subscribeAudioSettings(settings => {
@@ -157,10 +170,11 @@ export default function App() {
     });
   }, []);
 
-  /* Keep Fast Restart preference synchronized with AudioSettingsDrawer */
+  /* Keep Fast Restart & Drafting Grid preferences synchronized with AudioSettingsDrawer */
   useEffect(() => {
     return subscribePreferences(prefs => {
       setFastRestartState(prefs.fastRestart);
+      setDraftingGridState(prefs.draftingGrid);
     });
   }, []);
 
@@ -217,7 +231,17 @@ export default function App() {
   }, []);
 
   const syncHudNow = useCallback(() => {
-    setHud(getHudSnapshot(gameRef.current));
+    const snap = getHudSnapshot(gameRef.current);
+    const wrongCount = snap.targetMarks.filter(m => m === false).length;
+    if (wrongCount > prevArcadeWrongRef.current) {
+      setTargetTypoKey(k => k + 1);
+    }
+    prevArcadeWrongRef.current = wrongCount;
+    if (snap.kills > prevArcadeKillsRef.current) {
+      setTargetCleanKey(k => k + 1);
+    }
+    prevArcadeKillsRef.current = snap.kills;
+    setHud(snap);
   }, []);
 
   const triggerFeedback = useCallback((html: string, kind: '' | 'good' | 'bad' = '') => {
@@ -273,11 +297,16 @@ export default function App() {
     onGameOver: () => {
       const G = gameRef.current;
       const snap = getHudSnapshot(G);
-      recordRunHistory('arcade', {
+      const res = recordRunHistory('arcade', {
         score: snap.score,
         accuracy: snap.acc,
         wpm: snap.wpm,
         wave: snap.wave,
+      });
+      setArcadeRunRecords({
+        isNewBestScore: res.isNewBestScore,
+        isNewFastestWpm: res.isNewFastestWpm,
+        isNewLifetimeAcc: res.isNewLifetimeAcc,
       });
       if (G.variant === 'daily' && G.challenge) {
         const updated = recordDailyRun('arcade', G.challenge.dateKey, G.score, G.wave, G.kills);
@@ -305,8 +334,30 @@ export default function App() {
     [syncHudNow]
   );
 
+  const focusArcadeCard = useCallback((openKeyboard = false) => {
+    if (window.innerWidth <= 720) {
+      window.requestAnimationFrame(() => {
+        stageWrapRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (openKeyboard) {
+          setMobileLive(true);
+          mobileInputRef.current?.focus({ preventScroll: true });
+        }
+      });
+    } else if (openKeyboard) {
+      setMobileLive(true);
+      window.requestAnimationFrame(() => {
+        mobileInputRef.current?.focus({ preventScroll: true });
+      });
+    }
+  }, []);
+
   const startGame = useCallback(
     (overrideVariant?: PlayVariant) => {
+      setArcadeRunRecords(null);
+      setTargetTypoKey(0);
+      setTargetCleanKey(0);
+      prevArcadeWrongRef.current = 0;
+      prevArcadeKillsRef.current = 0;
       const variant = overrideVariant ?? arcadeVariantRef.current;
       const challenge = dailyChallengeRef.current;
       const G = freshState(variant, challenge);
@@ -330,8 +381,9 @@ export default function App() {
       ensureAudio();
       SFX.wave();
       syncHudNow();
+      focusArcadeCard(false);
     },
-    [showWaveBanner, syncHudNow, triggerFeedback]
+    [focusArcadeCard, showWaveBanner, syncHudNow, triggerFeedback]
   );
 
   const togglePause = useCallback(
@@ -685,13 +737,7 @@ export default function App() {
     if (mode === 'menu' || mode === 'over') {
       startGame();
     }
-    setMobileLive(true);
-    window.requestAnimationFrame(() => {
-      mobileInputRef.current?.focus({ preventScroll: true });
-      if (window.innerWidth <= 720) {
-        document.getElementById('consoleBar')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    });
+    focusArcadeCard(true);
     e.currentTarget.blur();
   };
 
@@ -704,6 +750,9 @@ export default function App() {
   const canRestart = activeView === 'arcade' || activeView === 'defense';
 
   const showInGameChrome = activeView !== 'home' && !tutorialOpen;
+  const isActivelyPlaying =
+    (activeView === 'arcade' && hud.mode === 'playing') ||
+    (activeView === 'defense' && defenseStatus.running && !defenseStatus.paused && !defenseStatus.over);
 
   return (
     <>
@@ -801,6 +850,9 @@ export default function App() {
             dailyChallenge={dailyChallenge}
             dailyProgress={dailyProgress}
             playerHistory={playerHistory}
+            darkMode={darkMode}
+            onToggleTheme={() => setDarkMode(d => !d)}
+            onOpenSettings={openAudio}
             onStartArcade={daily => launchGameFromHome('arcade', daily)}
             onStartDefense={daily => launchGameFromHome('defense', daily)}
           />
@@ -808,7 +860,7 @@ export default function App() {
           <>
             <HudBar hud={hud} streakPop={streakPop} />
 
-            <section className="stage-wrap">
+            <section ref={stageWrapRef} className="stage-wrap" aria-label="Type Arcade battlefield card">
               <div className="stage-head">
                 <span className="cap">
                   {hud.mode !== 'menu' && hud.variant === 'daily' && hud.challengeName
@@ -820,7 +872,19 @@ export default function App() {
                 </span>
               </div>
 
-              <div className={`stage${shaking ? ' shake' : ''}`} id="stage">
+              <div
+                className={`stage${shaking ? ' shake' : ''}`}
+                id="stage"
+                onClick={e => {
+                  if (
+                    gameRef.current.mode === 'playing' &&
+                    window.innerWidth <= 860 &&
+                    (e.target === e.currentTarget || e.target === canvasRef.current)
+                  ) {
+                    focusArcadeCard(true);
+                  }
+                }}
+              >
                 <canvas
                   ref={canvasRef}
                   id="game"
@@ -948,95 +1012,134 @@ export default function App() {
 
                 {/* GAME OVER */}
                 <div className="overlay" id="overOverlay" hidden={hud.mode !== 'over'}>
-                  <div className="overlay-card over-wide">
-                    <p className="cap accent-cap">The hero is down</p>
-                    <h2>GAME OVER</h2>
-                    <div className="final-stats" id="finalStats">
-                      <div>
-                        <span className="cap">Session Score</span>
-                        <b>{hud.score.toLocaleString()}</b>
-                      </div>
-                      <div>
-                        <span className="cap">Session Accuracy</span>
-                        <b>{hud.acc}%</b>
-                      </div>
-                      <div>
-                        <span className="cap">Lifetime Best Acc</span>
-                        <b>{Math.max(playerHistory.lifetimeBestAccuracy, hud.acc)}%</b>
-                      </div>
-                      <div>
-                        <span className="cap">Wave &amp; Kills</span>
-                        <b>
-                          W{hud.wave} · {hud.kills} down
-                        </b>
-                      </div>
-                      <div>
-                        <span className="cap">Speed</span>
-                        <b>{hud.wpm} wpm</b>
-                      </div>
-                      <div>
-                        <span className="cap">Best Score</span>
-                        <b>
-                          {Math.max(hud.score, playerHistory.arcade.bestScore).toLocaleString()}
-                        </b>
-                      </div>
-                    </div>
+                  {(() => {
+                    const rank = computeArcadeRank({
+                      wpm: hud.wpm,
+                      acc: hud.acc,
+                      wave: hud.wave,
+                      kills: hud.kills,
+                    });
+                    const rec = arcadeRunRecords;
+                    return (
+                      <div className="overlay-card over-wide">
+                        <p className="cap accent-cap">The hero is down</p>
+                        <h2>GAME OVER</h2>
 
-                    <WpmTrendChart samples={hud.wpmHistory} finalWpm={hud.wpm} />
+                        <div
+                          className={`rank-banner${rank.isTopTier ? ' top' : ''}`}
+                          aria-label={`Run rank ${rank.grade}, ${rank.title}`}
+                        >
+                          <span className="rank-grade mono">{rank.grade}</span>
+                          <div className="rank-copy">
+                            <strong>{rank.title}</strong>
+                            <span className="mono">{rank.note}</span>
+                          </div>
+                        </div>
 
-                    <SocialShareBar
-                      compact
-                      shareText={buildArcadeShareText(hud)}
-                      cardFilename={`hairline-arcade-wave-${hud.wave}.png`}
-                      renderCardPng={() => renderArcadeShareCardPng(hud, darkMode)}
-                    />
+                        <div className="final-stats" id="finalStats">
+                          <div>
+                            <span className="cap">
+                              Session Score{' '}
+                              {rec?.isNewBestScore && <em className="new-rec-tag">NEW</em>}
+                            </span>
+                            <b>{hud.score.toLocaleString()}</b>
+                          </div>
+                          <div>
+                            <span className="cap">Session Accuracy</span>
+                            <b>{hud.acc}%</b>
+                          </div>
+                          <div>
+                            <span className="cap">
+                              Lifetime Best Acc{' '}
+                              {rec?.isNewLifetimeAcc && <em className="new-rec-tag">NEW</em>}
+                            </span>
+                            <b>{Math.max(playerHistory.lifetimeBestAccuracy, hud.acc)}%</b>
+                          </div>
+                          <div>
+                            <span className="cap">Wave &amp; Kills</span>
+                            <b>
+                              W{hud.wave} · {hud.kills} down
+                            </b>
+                          </div>
+                          <div>
+                            <span className="cap">
+                              Speed{' '}
+                              {rec?.isNewFastestWpm && <em className="new-rec-tag">NEW</em>}
+                            </span>
+                            <b>{hud.wpm} wpm</b>
+                          </div>
+                          <div>
+                            <span className="cap">Best Score</span>
+                            <b>
+                              {Math.max(hud.score, playerHistory.arcade.bestScore).toLocaleString()}
+                            </b>
+                          </div>
+                        </div>
 
-                    <div className="over-actions">
-                      <button
-                        className="cta"
-                        id="btnAgain"
-                        type="button"
-                        onClick={e => {
-                          startGame();
-                          e.currentTarget.blur();
-                        }}
-                      >
-                        ↻ &nbsp;PLAY AGAIN
-                      </button>
-                      <p className="fine">
-                        {fastRestart ? (
-                          <>
-                            Fast Restart ON — type <kbd>A–Z</kbd> to jump back in, or{' '}
-                            <kbd>Enter</kbd>
-                          </>
-                        ) : (
-                          <>
-                            <kbd>Enter</kbd> also restarts
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
+                        <WpmTrendChart samples={hud.wpmHistory} finalWpm={hud.wpm} />
+
+                        <SocialShareBar
+                          compact
+                          shareText={buildArcadeShareText(hud)}
+                          cardFilename={`hairline-arcade-wave-${hud.wave}.png`}
+                          renderCardPng={() => renderArcadeShareCardPng(hud, darkMode)}
+                        />
+
+                        <div className="over-actions">
+                          <button
+                            className="cta"
+                            id="btnAgain"
+                            type="button"
+                            onClick={e => {
+                              startGame();
+                              e.currentTarget.blur();
+                            }}
+                          >
+                            ↻ &nbsp;PLAY AGAIN
+                          </button>
+                          <p className="fine">
+                            {fastRestart ? (
+                              <>
+                                Fast Restart ON — type <kbd>A–Z</kbd> to jump back in, or{' '}
+                                <kbd>Enter</kbd>
+                              </>
+                            ) : (
+                              <>
+                                <kbd>Enter</kbd> also restarts
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* ── TYPING CONSOLE ── */}
               <div className="console" id="consoleBar">
-                <div className="console-target">
+                <div className={`console-target${hud.targetWord ? ' has-target' : ''}`}>
+                  {targetCleanKey > 0 && (
+                    <span key={targetCleanKey} className="target-sweep" aria-hidden="true" />
+                  )}
                   <span className="cap">Target</span>
                   <div
-                    className={`target-word mono${hud.targetIsLine ? ' phrase' : ''}`}
+                    key={`typo-${targetTypoKey}`}
+                    className={`target-word mono${hud.targetIsLine ? ' phrase' : ''}${
+                      targetTypoKey > 0 ? ' target-typo-nudge' : ''
+                    }`}
                     id="targetWord"
                     aria-live="polite"
                   >
                     {hud.targetWord ? (
                       [...hud.targetWord].map((ch, i) => {
                         const glyph = ch === ' ' ? '␣' : ch;
+                        const justHit = i === hud.targetProgress - 1;
                         const cls =
                           i < hud.targetProgress
                             ? hud.targetMarks[i] === false
-                              ? 'wronged'
-                              : 'done'
+                              ? `wronged${justHit ? ' char-pop' : ''}`
+                              : `done${justHit ? ' char-pop' : ''}`
                             : i === hud.targetProgress
                               ? 'cur'
                               : 'todo';
@@ -1088,6 +1191,7 @@ export default function App() {
                   autoCorrect="off"
                   spellCheck={false}
                   aria-label="Type here"
+                  onBlur={() => setMobileLive(false)}
                   onChange={handleMobileInput}
                 />
               </div>
@@ -1144,8 +1248,8 @@ export default function App() {
         }}
       />
 
-      {/* Mobile-native bottom thumb dock (in-game only, hidden while soft keyboard is open) */}
-      {showInGameChrome && !softKeyboardOpen && (
+      {/* Mobile-native bottom thumb dock (hidden during active play or when soft keyboard is open so play card stays unobstructed) */}
+      {showInGameChrome && !isActivelyPlaying && !softKeyboardOpen && (
         <nav className="mobile-dock" aria-label="Mobile quick navigation">
           <button
             type="button"

@@ -82,8 +82,8 @@ export function freshState(
 
 export function getPalette(dark: boolean): Palette {
   return dark
-    ? { plate: '#08090a', hi: '#d0d6e0', edge: '#5b5d64', mid: '#3e3e44', lo: '#29292d', accent: '#ff6369' }
-    : { plate: '#ffffff', hi: '#232327', edge: '#a4a4ac', mid: '#c3c3c9', lo: '#e0e0e4', accent: '#e5484d' };
+    ? { plate: '#08090a', hi: '#e2e6ee', edge: '#949ca9', mid: '#6e7582', lo: '#282a2f', accent: '#ff6b72' }
+    : { plate: '#ffffff', hi: '#1b1b1f', edge: '#60606b', mid: '#7c7c88', lo: '#dcdce2', accent: '#cf2e36' };
 }
 
 export function aliveEnemies(G: GameState): Enemy[] {
@@ -373,23 +373,18 @@ export function handleChar(G: GameState, raw: string, cb: EngineCallbacks): void
     G.bestStreak = Math.max(G.bestStreak, G.streak);
     cb.onStreakPop();
 
-    // Custom weapon triggers in Daily Challenge mode
+    // Daily Challenge weapon bonuses (bonus score, tracer beam & knockback — never skips letters)
     let weaponNote = '';
     let firedRail = false;
-    if (G.weapon === 'rail' && G.weaponCharge % 4 === 0 && !isFinal) {
-      // Pierce an extra letter immediately
-      active.marks.push(true);
-      active.progress++;
-      isFinal = active.progress >= active.word.length;
+    if (G.weapon === 'rail' && G.weaponCharge % 4 === 0) {
       firedRail = true;
-      weaponNote = ' · <b>RAIL ×2</b>';
-      floatText(G, active.x, active.gy - 108 * active.s, 'RAIL ×2', 'good');
-    } else if (G.weapon === 'hyper' && G.weaponCharge % 2 === 0 && !isFinal) {
-      active.marks.push(true);
-      active.progress++;
-      isFinal = active.progress >= active.word.length;
-      weaponNote = ' · <b>HYPER ×2</b>';
-      floatText(G, active.x, active.gy - 108 * active.s, 'HYPER ×2', 'good');
+      active.kb = Math.max(active.kb, 36);
+      weaponNote = ' · <b>RAIL +15</b>';
+      floatText(G, active.x, active.gy - 108 * active.s, 'RAIL +15', 'good');
+    } else if (G.weapon === 'hyper' && G.weaponCharge % 2 === 0) {
+      addScore(G, 6, active.x, active.gy - 108 * active.s);
+      weaponNote = ' · <b>HYPER +6</b>';
+      floatText(G, active.x, active.gy - 108 * active.s, 'HYPER +6', 'good');
     }
 
     if (isFinal) {
@@ -398,24 +393,20 @@ export function handleChar(G: GameState, raw: string, cb: EngineCallbacks): void
     }
 
     fireHeroBullet(G, active, ch, isFinal, { isRail: firedRail });
-    addScore(G, firedRail ? 20 : 10, active.x, active.gy - 92 * active.s);
+    addScore(G, firedRail ? 25 : 10, active.x, active.gy - 92 * active.s);
 
-    // Secondary multi-target weapons (Twin-Bolt / Scattergun)
+    // Secondary multi-target shockwaves (Twin-Bolt / Scattergun — knockback + bonus score only)
     if (G.weapon === 'twin' && G.weaponCharge % 3 === 0) {
       const other = G.enemies
         .filter(e => e.id !== active.id && e.state === 'alive' && !e.completed)
         .sort((a, b) => a.x - b.x)[0];
       if (other) {
-        const hitChar = other.word[other.progress] ?? '';
-        other.marks.push(true);
-        other.progress++;
-        const otherFinal = other.progress >= other.word.length;
-        if (otherFinal) {
-          other.completed = true;
-          if (G.activeId === other.id) G.activeId = null;
-        }
-        fireHeroBullet(G, other, hitChar, otherFinal, { isSplit: true, playSfx: false });
-        floatText(G, other.x, other.gy - 106 * other.s, 'TWIN', 'good');
+        other.kb = Math.max(other.kb, 26);
+        other.flashT = 0.12;
+        burst(G, other.x, other.gy - 42 * other.s, 7, false);
+        addScore(G, 10, other.x, other.gy - 106 * other.s);
+        floatText(G, other.x, other.gy - 106 * other.s, 'TWIN +10', 'good');
+        SFX.scatter();
         weaponNote = ' · <b>TWIN-BOLT</b>';
       }
     } else if (G.weapon === 'scatter' && G.weaponCharge % 4 === 0) {
@@ -426,16 +417,11 @@ export function handleChar(G: GameState, raw: string, cb: EngineCallbacks): void
       if (others.length) {
         SFX.scatter();
         for (const o of others) {
-          const hitChar = o.word[o.progress] ?? '';
-          o.marks.push(true);
-          o.progress++;
-          const oFinal = o.progress >= o.word.length;
-          if (oFinal) {
-            o.completed = true;
-            if (G.activeId === o.id) G.activeId = null;
-          }
-          fireHeroBullet(G, o, hitChar, oFinal, { isSplit: true, playSfx: false });
-          floatText(G, o.x, o.gy - 106 * o.s, 'SCATTER', 'good');
+          o.kb = Math.max(o.kb, 22);
+          o.flashT = 0.12;
+          burst(G, o.x, o.gy - 42 * o.s, 6, false);
+          addScore(G, 8, o.x, o.gy - 106 * o.s);
+          floatText(G, o.x, o.gy - 106 * o.s, 'SCATTER +8', 'good');
         }
         weaponNote = ' · <b>SCATTER</b>';
       }
